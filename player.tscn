@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://be3femxh64k2t"]
 
-[ext_resource type="Script" path="res://PlayerController.cs" id="1_4flbx"]
+[ext_resource type="Script" uid="uid://b2vtpn4utk1y0" path="res://NetworkedPlayer.cs" id="1_4flbx"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]
 

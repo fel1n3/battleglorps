@@ -49,14 +49,14 @@ public partial class CameraController : Node3D
         _panVelocity = Vector3.Zero;
 
         if (mousePos.X < EdgePanMargin) 
-            _panVelocity.X = -1;
-        else if (mousePos.X > viewportSize.X - EdgePanMargin)
             _panVelocity.X = 1;
+        else if (mousePos.X > viewportSize.X - EdgePanMargin)
+            _panVelocity.X = -1;
 
         if (mousePos.Y < EdgePanMargin)
-            _panVelocity.Z = -1;
-        else if (mousePos.Y > viewportSize.Y - EdgePanMargin)
             _panVelocity.Z = 1;
+        else if (mousePos.Y > viewportSize.Y - EdgePanMargin)
+            _panVelocity.Z = -1;
 
         if (_panVelocity.LengthSquared() > 0)
         {
@@ -70,13 +70,13 @@ public partial class CameraController : Node3D
         Vector3 input = Vector3.Zero;
 
         if (Input.IsActionPressed("ui_left"))
-            input.X -= 1;
-        if (Input.IsActionPressed("ui_right"))
             input.X += 1;
+        if (Input.IsActionPressed("ui_right"))
+            input.X -= 1;
         if (Input.IsActionPressed("ui_up"))
-            input.Z -= 1;
-        if (Input.IsActionPressed("ui_down"))
             input.Z += 1;
+        if (Input.IsActionPressed("ui_down"))
+            input.Z -= 1;
 
         if (input.LengthSquared() > 0)
         {

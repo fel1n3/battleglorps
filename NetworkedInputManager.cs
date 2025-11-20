@@ -2,35 +2,43 @@ using Godot;
 using System;
 using Godot.Collections;
 
-public partial class InputManager : Node3D
+public partial class NetworkedInputManager : Node3D
 {
     private CameraController _cameraController;
-    private PlayerController _player;
+    private NetworkedPlayer _localPlayer;
     private Camera3D _camera;
     private bool _isRMBHeld = false;
 
     public override void _Ready()
     {
         _cameraController = GetNode<CameraController>("/root/Main/CameraController");
-        _player = GetNode<PlayerController>("/root/Main/Player");
         _camera = GetViewport().GetCamera3D();
+    }
+
+    public void SetLocalPlayer(NetworkedPlayer player)
+    {
+        _localPlayer = player;
+        GD.Print("local player set for input manager");
     }
 
     public override void _Process(double delta)
     {
+        if (_localPlayer == null) return;
+        
         if (_isRMBHeld)
         {
             Vector2 mousePos = GetViewport().GetMousePosition();
-            var hitPos = GetMouseWorldPosition(mousePos);
+            Vector3? hitPos = GetMouseWorldPosition(mousePos);
             if (hitPos.HasValue)
             {
-                _player.SetTargetPosition(hitPos.Value);
+                _localPlayer.SetTargetPosition(hitPos.Value);
             }
         }
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (_localPlayer == null) return;
         if (@event is InputEventMouseButton mouseButton)
         {
             if (mouseButton.ButtonIndex == MouseButton.Right)
@@ -42,7 +50,7 @@ public partial class InputManager : Node3D
                     Vector3? hitPosition = GetMouseWorldPosition(mouseButton.Position);
                     if (hitPosition.HasValue)
                     {
-                        _player.SetTargetPosition(hitPosition.Value);
+                        _localPlayer.SetTargetPosition(hitPosition.Value);
                     }
                 }
             }
