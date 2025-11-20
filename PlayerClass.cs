@@ -1,20 +1,81 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
-public partial class PlayerController : CharacterBody3D
+public partial class PlayerClass : CharacterBody3D
 {
+    [Export] public ClassData ClassData { get; set; }
     [Export] public float MoveSpeed = 5.0f;
     [Export] public float RotationSpeed = 10.0f;
     [Export] public float StoppingDistance = 0.5f;
+
+    public float CurrentHealth { get; private set; }
+    public float CurrentMana { get; private set; }
+    
+    public List<Ability> Abilities { get; private set; }
 
     private Vector3 _targetPosition;
     private bool _hasTarget = false;
     private Node3D _selectionIndicator;
 
+    private MeshInstance3D _meshInstance;
+    private Node3D _healthBarPivot;
+    private ProgressBar _healthBar;
     public override void _Ready()
     {
+        if (ClassData == null)
+        {
+            GD.PrintErr("No class assigned!");
+            return;
+        }
+
+        CurrentHealth = ClassData.MaxHealth;
+        CurrentMana = ClassData.MaxMana;
         _targetPosition = GlobalPosition;
 
+        CreateSelectionIndicator();
+        CreateHealthBar();
+        SetupVisuals();
+    }
+
+    private void SetupVisuals()
+    {
+        _meshInstance = GetNodeOrNull<MeshInstance3D>("MeshInstance3D");
+        if (_meshInstance != null)
+        {
+            var material = new StandardMaterial3D();
+            material.AlbedoColor = ClassData.ClassColor;
+            _meshInstance.MaterialOverride = material;
+            _meshInstance.Scale = ClassData.ModelScale;
+        }
+        
+    }
+
+    private void CreateHealthBar()
+    {
+        _healthBarPivot = new Node3D();
+        _healthBarPivot.Position = new Vector3(0, 2.5f, 0);
+        AddChild(_healthBarPivot);
+
+        SubViewportContainer subViewport = new();
+        subViewport.CustomMinimumSize = new Vector2(100, 15);
+
+        SubViewport viewport = new();
+        viewport.TransparentBg = true;
+        viewport.Size = new Vector2I(100, 15);
+        subViewport.AddChild(viewport);
+
+        _healthBar = new ProgressBar();
+        _healthBar.CustomMinimumSize = new Vector2(100, 15);
+        _healthBar.MaxValue = ClassData.MaxHealth;
+        _healthBar.Value = CurrentHealth;
+        _healthBar.ShowPercentage = false;
+        viewport.AddChild(_healthBar);
+
+    }
+
+    private void CreateSelectionIndicator()
+    {
         _selectionIndicator = new Node3D();
         AddChild(_selectionIndicator);
 
@@ -64,7 +125,7 @@ public partial class PlayerController : CharacterBody3D
         }
     }
 
-    public void SetTargetPosition(Vector3 position)
+    public virtual void SetTargetPosition(Vector3 position)
     {
         _targetPosition = position;
         _hasTarget = true;

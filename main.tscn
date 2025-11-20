@@ -1,8 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://c1hdowd3src6x"]
+[gd_scene load_steps=9 format=3 uid="uid://c1hdowd3src6x"]
 
+[ext_resource type="Script" uid="uid://b6d7m4wv70oj6" path="res://Lobby.cs" id="1_7mycd"]
 [ext_resource type="Script" uid="uid://1nxge02ec3wg" path="res://CameraController.cs" id="1_h2yge"]
+[ext_resource type="Script" uid="uid://cqngmmvj8grqm" path="res://SteamNetworkManager.cs" id="1_lquwl"]
+[ext_resource type="Script" uid="uid://dj7pkxnjhebd5" path="res://NetworkedInputManager.cs" id="2_0xm2m"]
 [ext_resource type="PackedScene" uid="uid://be3femxh64k2t" path="res://player.tscn" id="2_1bvp3"]
-[ext_resource type="Script" uid="uid://dj7pkxnjhebd5" path="res://InputManager.cs" id="3_lquwl"]
+[ext_resource type="Script" uid="uid://dkkhicuy1l5sw" path="res://NetworkGameManager.cs" id="2_7mycd"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7dm0k"]
 size = Vector3(60, 2, 60)
@@ -10,7 +13,27 @@ size = Vector3(60, 2, 60)
 [sub_resource type="BoxMesh" id="BoxMesh_ig7tw"]
 size = Vector3(60, 2, 60)
 
-[node name="Main" type="Node" unique_id=1613507008]
+[node name="Main" type="Node3D" unique_id=1659710956]
+
+[node name="Lobby" type="CanvasLayer" parent="." unique_id=580892630]
+
+[node name="Control" type="Control" parent="Lobby" unique_id=104985353]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_7mycd")
+
+[node name="SteamNetworkManager" type="Node" parent="." unique_id=418303718]
+script = ExtResource("1_lquwl")
+
+[node name="NetworkGameManager" type="Node" parent="." unique_id=315703524 node_paths=PackedStringArray("SpawnParent")]
+script = ExtResource("2_7mycd")
+PlayerScene = ExtResource("2_1bvp3")
+SpawnParent = NodePath("")
+
+[node name="NetworkedInputManager" type="Node3D" parent="." unique_id=322256414]
+script = ExtResource("2_0xm2m")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1554204951]
 transform = Transform3D(1, 0, 0, 0, 1.1924881e-08, 1, 0, -1, 1.1924881e-08, 0, 8, 0)
@@ -31,9 +54,4 @@ script = ExtResource("1_h2yge")
 
 [node name="Camera3D" type="Camera3D" parent="CameraController" unique_id=356895310]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
-
-[node name="Player" parent="." unique_id=1190690771 instance=ExtResource("2_1bvp3")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.9000001, 0)
-
-[node name="InputManager" type="Node3D" parent="." unique_id=723898374]
-script = ExtResource("3_lquwl")
+current = true

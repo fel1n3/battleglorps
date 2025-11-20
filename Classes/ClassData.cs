@@ -40,7 +40,7 @@ public partial class Ability : Resource
 
     public float CurrentCooldown { get; set; } = 0f;
     
-    public virtual bool CanCast(PlayerClass playerClass){
-        return CurrentCooldown <= 0 && playerClass.
-    }
+   // public virtual bool CanCast(PlayerClass playerClass){
+   //     return CurrentCooldown <= 0 && playerClass.
+   // }
 }
