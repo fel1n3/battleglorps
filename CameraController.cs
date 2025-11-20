@@ -43,6 +43,12 @@ public partial class CameraController : Node3D
 
     private void HandleEdgePanning(double delta)
     {
+        if (!DisplayServer.WindowIsFocused())
+        {
+            _panVelocity = Vector3.Zero;
+            return;
+        }
+        
         Vector2 mousePos = GetViewport().GetMousePosition();
         Vector2 viewportSize = GetViewport().GetVisibleRect().Size;
 

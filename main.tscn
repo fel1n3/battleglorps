@@ -15,22 +15,12 @@ size = Vector3(60, 2, 60)
 
 [node name="Main" type="Node3D" unique_id=1659710956]
 
-[node name="Lobby" type="CanvasLayer" parent="." unique_id=580892630]
-
-[node name="Control" type="Control" parent="Lobby" unique_id=104985353]
-layout_mode = 3
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-script = ExtResource("1_7mycd")
-
 [node name="SteamNetworkManager" type="Node" parent="." unique_id=418303718]
 script = ExtResource("1_lquwl")
 
-[node name="NetworkGameManager" type="Node" parent="." unique_id=315703524 node_paths=PackedStringArray("SpawnParent")]
+[node name="NetworkGameManager" type="Node" parent="." unique_id=315703524]
 script = ExtResource("2_7mycd")
 PlayerScene = ExtResource("2_1bvp3")
-SpawnParent = NodePath("")
 
 [node name="NetworkedInputManager" type="Node3D" parent="." unique_id=322256414]
 script = ExtResource("2_0xm2m")
@@ -55,3 +45,12 @@ script = ExtResource("1_h2yge")
 [node name="Camera3D" type="Camera3D" parent="CameraController" unique_id=356895310]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 current = true
+
+[node name="Lobby" type="CanvasLayer" parent="." unique_id=580892630]
+
+[node name="Control" type="Control" parent="Lobby" unique_id=104985353]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_7mycd")

@@ -129,6 +129,11 @@ public partial class SteamNetworkManager : Node
         }
     }
 
+    public void CreateLobby()
+    {
+        
+    }
+
     private void OnP2PSessionRequest(P2PSessionRequest_t request)
     {
         CSteamID requesterId = request.m_steamIDRemote;

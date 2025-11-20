@@ -9,7 +9,7 @@ public partial class NetworkGameManager : Node
     [Export] public Node3D SpawnParent { get; set; }
 
     private SteamNetworkManager _networkManager;
-    private Dictionary<int, NetworkedPlayer> _playerList = new Dictionary<int, NetworkedPlayer>();
+    private Dictionary<int, NetworkedPlayer> _playerList = new();
     private NetworkedPlayer _localPlayer;
 
     public override void _Ready()
@@ -78,11 +78,10 @@ public partial class NetworkGameManager : Node
     {
         GD.Print($"player {playerId} disconnected");
 
-        if (_playerList.TryGetValue(playerId, out NetworkedPlayer player))
-        {
-            player.QueueFree();
-            _playerList.Remove(playerId);
-        }
+        if (!_playerList.TryGetValue(playerId, out NetworkedPlayer player)) return;
+        
+        player.QueueFree();
+        _playerList.Remove(playerId);
     }
 
     private void SpawnLocalPlayer(int playerId)
@@ -113,7 +112,7 @@ public partial class NetworkGameManager : Node
     {
         if (PlayerScene == null) return;
 
-        var playerInstance = PlayerScene.Instantiate<NetworkedPlayer>();
+        NetworkedPlayer playerInstance = PlayerScene.Instantiate<NetworkedPlayer>();
         playerInstance.IsLocalPlayer = false;
         playerInstance.NetworkId = playerId;
         playerInstance.OwnerSteamId = steamId;
