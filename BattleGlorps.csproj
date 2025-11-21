@@ -5,13 +5,11 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Steamworks.NET">
-      <HintPath>libs/Steamworks.NET.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="steam_api64.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Steamworks.NET.AnyCPU" Version="2025.162.6-b-socket.1" />
   </ItemGroup>
 </Project>
