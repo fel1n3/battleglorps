@@ -1,358 +1,492 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using BattleGlorps;
+using BattleGlorps.Classes;
 using Steamworks;
 
 public partial class SteamNetworkManager : Node
 {
     public static SteamNetworkManager Instance { get; private set; }
 
-    private bool _isSteamInitialized = false;
-    public CSteamID LocalSteamId { get; private set; }
+    public event Action<List<LobbyInfo>> OnLobbyListUpdated;
+    public event Action<CSteamID> OnPlayerConnected;
+    public event Action<CSteamID> OnPlayerDisconnected;
+    public event Action<string> OnChatMessageReceived;
+    public event Action<string> OnConnectionStatusMessage;
+    
+    
+    private HSteamListenSocket _listenSocket = HSteamListenSocket.Invalid;
+    private readonly List<HSteamNetConnection> _connections = new();
+    private Callback<SteamNetConnectionStatusChangedCallback_t> _connectionStatusChangedCallback;
+    private const int KMaxMessagesPerPoll = 32;
 
-    public bool IsServer { get; private set; } = false;
-    public CSteamID HostSteamId { get; private set; }
-    private Dictionary<CSteamID, int> _steamIdToPlayerId = new Dictionary<CSteamID, int>();
-    private Dictionary<int, CSteamID> _playerIdToSteamId = new Dictionary<int, CSteamID>();
-    private int _nextPlayerId = 1;
+    private CSteamID _currentLobbyId;
+    private CallResult<LobbyCreated_t> _lobbyCreated;
+    private CallResult<LobbyMatchList_t> _lobbyList;
+    private CallResult<LobbyEnter_t> _lobbyEnter;
+    private Callback<GameLobbyJoinRequested_t> _gameLobbyJoinRequested;
 
-    private Callback<P2PSessionRequest_t> _p2pSessionRequest;
-    private Callback<P2PSessionConnectFail_t> _p2pSessionConnectFail;
-
-    public event Action<int, CSteamID> PlayerConnected;
-    public event Action<int> PlayerDisconnected;
-    public event Action ServerCreated;
-    public event Action JoinedServer;
-    public event Action<string> ConnectionFailed;
-
+    private byte _localNetworkId = 0;
+    private byte _nextNetworkId = 1;
+    
+    [Export] private PackedScene _playerScene;
+    [Export] private Node3D _spawnParent;
+    private Dictionary<byte, NetworkedPlayer> _playerList = new();
+    private Dictionary<HSteamNetConnection, byte> _connToNetId = new();
     public override void _Ready()
     {
-        if (Instance != null)
+        Instance = this;
+
+        GD.Print("init steam api");
+
+        if (!SteamAPI.Init())
         {
-            QueueFree();
+            GD.PrintErr("steamapi init failed is steam running");
             return;
         }
 
-        Instance = this;
+        _connectionStatusChangedCallback =
+            Callback<SteamNetConnectionStatusChangedCallback_t>.Create(OnConnectionStatusChanged);
 
-        InitializeSteam();
+        _gameLobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(OnGameLobbyJoinRequested);
+        
     }
 
-    private void InitializeSteam()
+    private void CreateP2PHost()
     {
+        if (_listenSocket != HSteamListenSocket.Invalid) return;
         try
         {
-            if (!SteamAPI.Init())
-            {
-                GD.PrintErr("failed to init steam api! steam not running?");
-                return;
-            }
-
-            _isSteamInitialized = true;
-            LocalSteamId = SteamUser.GetSteamID();
-
-            GD.Print($"Steam initialized steam id: {LocalSteamId}");
-
-            _p2pSessionRequest = Callback<P2PSessionRequest_t>.Create(OnP2PSessionRequest);
-            _p2pSessionConnectFail = Callback<P2PSessionConnectFail_t>.Create(OnP2PSessionConnectFail);
+            _listenSocket = SteamNetworkingSockets.CreateListenSocketP2P(0, 0, null);
+            GD.Print($"steam created listen socket: {_listenSocket.ToString()}");
         }
         catch (Exception e)
         {
-            GD.PrintErr($"steam init err: {e.Message}");
+            GD.PrintErr($"steam createlistensocketp2p threw: {e}");
         }
     }
 
     public override void _Process(double delta)
     {
-        if (!_isSteamInitialized) return;
-        
         SteamAPI.RunCallbacks();
-        ReceiveP2PPackets();
-    }
-
-    public override void _ExitTree()
-    {
-        if (!_isSteamInitialized) return;
-        
-        CloseAllConnections();
-        SteamAPI.Shutdown();
-    }
-
-    public void CreateServer()
-    {
-        if (!_isSteamInitialized)
-        {
-            GD.PrintErr("steam not init");
-            ConnectionFailed?.Invoke("steam not init");
-            return;
-        }
-
-        IsServer = true;
-        HostSteamId = LocalSteamId;
-
-        _steamIdToPlayerId[LocalSteamId] = 0;
-        _playerIdToSteamId[0] = LocalSteamId;
-        
-        GD.Print($"Server created! host steam id:{HostSteamId}");
-        ServerCreated?.Invoke();
-        PlayerConnected?.Invoke(0, LocalSteamId);
-    }
-
-    public void JoinServer(CSteamID hostSteamId)
-    {
-        if (!_isSteamInitialized)
-        {
-            GD.PrintErr("Steam not init");
-            ConnectionFailed?.Invoke("steam not init");
-            return;
-        }
-
-        IsServer = false;
-        HostSteamId = hostSteamId;
-        
-        GD.Print($"Attempting to join server: {hostSteamId}");
-
-        SendPacketToSteamId(hostSteamId, PacketType.ConnectionRequest, new byte[] { });
-    }
-
-    public void JoinServerByString(string steamIdString)
-    {
-        if (ulong.TryParse(steamIdString, out ulong steamId))
-        {
-            JoinServer(new CSteamID(steamId));
-            
-        }
-        else
-        {
-            GD.PrintErr($"invalid steam id format: {steamIdString}");
-            ConnectionFailed?.Invoke("invalid steam id");
-        }
+        PollIncomingMessages();
     }
 
     public void CreateLobby()
     {
+        SteamAPICall_t call = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, 4);
+        _lobbyCreated = CallResult<LobbyCreated_t>.Create(OnLobbyCreated);
+        _lobbyCreated.Set(call);
+        OnConnectionStatusMessage?.Invoke("Creating lobby...");
+    }
+
+    private void OnLobbyCreated(LobbyCreated_t param, bool bIOFailure)
+    {
+        if (param.m_eResult != EResult.k_EResultOK || bIOFailure) return;
+
+        _currentLobbyId = new CSteamID(param.m_ulSteamIDLobby);
+        OnConnectionStatusMessage?.Invoke($"Lobby created id: {_currentLobbyId}");
+
+        CreateP2PHost();
+
+        SteamMatchmaking.SetLobbyData(_currentLobbyId, "HostAddress", SteamUser.GetSteamID().ToString());
+        SteamMatchmaking.SetLobbyData(_currentLobbyId, "Name", SteamFriends.GetPersonaName() + "'s Lobby");
+
+        SteamMatchmaking.SetLobbyData(_currentLobbyId, "game_id", "battle_glorps_v1");
+    }
+
+    public void GetLobbyList()
+    {
+        OnConnectionStatusMessage?.Invoke("Searching for lobbies.....");
+
+        SteamMatchmaking.AddRequestLobbyListStringFilter("game_id", "battle_glorps_v1",
+            ELobbyComparison.k_ELobbyComparisonEqual);
         
+        SteamAPICall_t call = SteamMatchmaking.RequestLobbyList();
+        _lobbyList = CallResult<LobbyMatchList_t>.Create(OnLobbyListReceived);
+        _lobbyList.Set(call);
     }
 
-    private void OnP2PSessionRequest(P2PSessionRequest_t request)
+    private void OnLobbyListReceived(LobbyMatchList_t param, bool bIOFailure)
     {
-        CSteamID requesterId = request.m_steamIDRemote;
-        GD.Print($"p2p request from: {requesterId}");
+        List<LobbyInfo> foundLobbies = new List<LobbyInfo>();
 
-        SteamNetworking.AcceptP2PSessionWithUser(requesterId);
-
-        if (!IsServer) return;
-        
-        int playerId = _nextPlayerId++;
-        _steamIdToPlayerId[requesterId] = playerId;
-        _playerIdToSteamId[playerId] = requesterId;
-            
-        GD.Print($"player {playerId} connected {requesterId}");
-
-        SendPlayerIdToClient(requesterId, playerId);
-        BroadcastPlayerJoined(playerId, requesterId);
-        PlayerConnected?.Invoke(playerId, requesterId);
-    }
-
-    private void OnP2PSessionConnectFail(P2PSessionConnectFail_t failure)
-    {
-        GD.PrintErr($"p2p connx fail: {failure.m_eP2PSessionError}");
-        ConnectionFailed?.Invoke($"p2p error {failure.m_eP2PSessionError}");
-    }
-
-    private void ReceiveP2PPackets()
-    {
-        while (SteamNetworking.IsP2PPacketAvailable(out uint packetSize))
+        for (int i = 0; i < param.m_nLobbiesMatching; i++)
         {
-            byte[] data = new byte[packetSize];
-
-            if (SteamNetworking.ReadP2PPacket(data, packetSize, out packetSize, out CSteamID senderId))
+            CSteamID lobbyId = SteamMatchmaking.GetLobbyByIndex(i);
+            foundLobbies.Add(new LobbyInfo
             {
-                HandlePacket(senderId, data);
-            }
+                LobbyId = lobbyId.m_SteamID,
+                Name=SteamMatchmaking.GetLobbyData(lobbyId, "Name"),
+                PlayerCount = SteamMatchmaking.GetNumLobbyMembers(lobbyId),
+                MaxPlayers =  SteamMatchmaking.GetLobbyMemberLimit(lobbyId)
+            });
         }
+
+        OnLobbyListUpdated?.Invoke(foundLobbies);
     }
 
-    private void HandlePacket(CSteamID senderId, byte[] data)
+    public void JoinLobby(ulong lobbyId)
     {
-        if (data.Length < 1) return;
+        CSteamID steamLobbyId = new(lobbyId);
+        SteamAPICall_t call = SteamMatchmaking.JoinLobby(steamLobbyId);
+        _lobbyEnter = CallResult<LobbyEnter_t>.Create(OnLobbyEntered);
+        _lobbyEnter.Set(call);
+    }
 
-        PacketType packetType = (PacketType) data[0];
-        byte[] payload = new byte[data.Length - 1];
-        Array.Copy(data, 1, payload, 0, payload.Length);
+    public ulong GetCurrentLobbyID()
+    {
+        return _currentLobbyId.m_SteamID;
+    }
 
-        switch (packetType)
+    private void OnGameLobbyJoinRequested(GameLobbyJoinRequested_t param)
+    {
+        JoinLobby(param.m_steamIDLobby.m_SteamID);
+    }
+
+    private void OnLobbyEntered(LobbyEnter_t param, bool bIOFailure)
+    {
+        if (param.m_EChatRoomEnterResponse != (uint) EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess) return;
+
+        _currentLobbyId = new CSteamID(param.m_ulSteamIDLobby);
+        OnConnectionStatusMessage?.Invoke("joined lobby checking host");
+
+        if (SteamMatchmaking.GetLobbyOwner(_currentLobbyId) == SteamUser.GetSteamID())
         {
-            case PacketType.ConnectionRequest:
-                break;
-            
-            case PacketType.AssignPlayerId:
-                if (!IsServer)
-                {
-                    int playerId = BitConverter.ToInt32(payload, 0);
-                    _steamIdToPlayerId[LocalSteamId] = playerId;
-                    _playerIdToSteamId[playerId] = LocalSteamId;
-                    GD.Print($"Assigned player id: {playerId}");
-                    JoinedServer?.Invoke();
-                }
-
-                break;
-            case PacketType.PlayerJoined:
-                if (!IsServer && payload.Length >= 12)
-                {
-                    int playerId = BitConverter.ToInt32(payload, 0);
-                    ulong steamId = BitConverter.ToUInt64(payload, 4);
-                    CSteamID playerSteamId = new CSteamID(steamId);
-
-                    _steamIdToPlayerId[playerSteamId] = playerId;
-                    _playerIdToSteamId[playerId] = playerSteamId;
-                    
-                    GD.Print($"player {playerId} joined {playerSteamId}");
-                    PlayerConnected?.Invoke(playerId, playerSteamId);
-                }
-
-                break;
-            
-            case PacketType.PlayerLeft:
-                int leftPlayerId = BitConverter.ToInt32(payload, 0);
-                HandlePlayerDisconnect(leftPlayerId);
-                break;
-            
-            case PacketType.GameData:
-                HandleGameData(senderId, payload);
-                break;
-            
-        }
-    }
-
-    private void HandleGameData(CSteamID senderId, byte[] data)
-    {
-        ///TODO 
-    }
-
-    private void SendPacketToSteamId(CSteamID targetSteamId, PacketType packetType, byte[] data,
-        EP2PSend sendType = EP2PSend.k_EP2PSendReliable)
-    {
-        byte[] packet = new byte[data.Length + 1];
-        packet[0] = (byte) packetType;
-        Array.Copy(data, 0, packet, 1, data.Length);
-
-        if (!SteamNetworking.SendP2PPacket(targetSteamId, packet, (uint) packet.Length, sendType))
-        {
-            GD.PrintErr($"failed to send packet to {targetSteamId}");
-        }
-    }
-
-    private void SendPlayerIdToClient(CSteamID clientSteamId, int playerId)
-    {
-        byte[] data = BitConverter.GetBytes(playerId);
-        SendPacketToSteamId(clientSteamId, PacketType.AssignPlayerId, data);
-    }
-
-    private void BroadcastPlayerJoined(int playerId, CSteamID steamId)
-    {
-        byte[] data = new byte[12];
-        BitConverter.GetBytes(playerId).CopyTo(data, 0);
-        BitConverter.GetBytes(steamId.m_SteamID).CopyTo(data, 4);
-
-        foreach (var kvp in _steamIdToPlayerId)
-        {
-            if (kvp.Key != LocalSteamId && kvp.Key != steamId)
-            {
-                SendPacketToSteamId(kvp.Key, PacketType.PlayerJoined, data);
-            }
-        }
-    }
-
-    public void BroadcastGameData(byte[] data, EP2PSend sendType = EP2PSend.k_EP2PSendUnreliable)
-    {
-        if (IsServer)
-        {
-            foreach (var steamId in _steamIdToPlayerId.Keys)
-            {
-                if (steamId != LocalSteamId)
-                {
-                    SendPacketToSteamId(steamId, PacketType.GameData, data, sendType);
-                }
-            }
+            if (_listenSocket == HSteamListenSocket.Invalid) CreateP2PHost();
         }
         else
         {
-            SendPacketToSteamId(HostSteamId, PacketType.GameData, data, sendType);
+            string hostAddress = SteamMatchmaking.GetLobbyData(_currentLobbyId, "HostAddress");
+            if (ulong.TryParse(hostAddress, out ulong hostId))
+            {
+                ConnectToPeer(hostId);
+            }
         }
     }
 
-    public void SendGameDataToPlayer(int playerId, byte[] data, EP2PSend sendType = EP2PSend.k_EP2PSendReliable)
+    public void ConnectToPeer(ulong hostSteamId, int virtualPort = 0)
     {
-        if (_playerIdToSteamId.TryGetValue(playerId, out CSteamID steamId))
+        if (!SteamAPI.IsSteamRunning())
         {
-            SendPacketToSteamId(steamId, PacketType.GameData, data, sendType);
+            GD.PrintErr("steam not running");
+            return;
         }
-    }
-
-    private void HandlePlayerDisconnect(int playerId)
-    {
-        if (_playerIdToSteamId.TryGetValue(playerId, out CSteamID steamId))
-        {
-            _steamIdToPlayerId.Remove(steamId);
-            _playerIdToSteamId.Remove(playerId);
-
-            SteamNetworking.CloseP2PSessionWithUser(steamId);
-            
-            GD.Print($"player {playerId} disconnected");
-            PlayerDisconnected?.Invoke(playerId);
-        }
-    }
-
-    public void DisconnectPlayer(int playerId)
-    {
-        if (!IsServer) return;
-
-        if (!_playerIdToSteamId.TryGetValue(playerId, out CSteamID steamId)) return;
         
-        byte[] data = BitConverter.GetBytes(playerId);
-        SendPacketToSteamId(steamId, PacketType.PlayerLeft, data);
-            
-        HandlePlayerDisconnect(playerId);
+        GD.Print($"attempting to join steamid {hostSteamId}");
+
+        SteamNetworkingIdentity identity = new();
+        identity.SetSteamID(new CSteamID(hostSteamId));
+
+        HSteamNetConnection conn = SteamNetworkingSockets.ConnectP2P(ref identity, virtualPort, 0, null);
+        _connections.Add(conn);
     }
 
-    private void CloseAllConnections()
+    private void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t param)
     {
-        foreach (CSteamID steamId in _steamIdToPlayerId.Keys)
+        CSteamID clientSteamId = param.m_info.m_identityRemote.GetSteamID();
+
+        switch (param.m_info.m_eState)
         {
-            SteamNetworking.CloseP2PSessionWithUser(steamId);
+            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connecting:
+                GD.Print($"Connection request from {clientSteamId}");
+
+                if (_listenSocket != HSteamListenSocket.Invalid)
+                {
+                    var res = SteamNetworkingSockets.AcceptConnection(param.m_hConn);
+                    if (res == EResult.k_EResultOK)
+                    {
+                        GD.Print("connx accepted");
+                    }
+                    else
+                    {
+                        GD.PrintErr($"connx accept failed {res}");
+                    }
+                }
+
+                break;
+
+            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected:
+                GD.Print($"connected to {clientSteamId}");
+
+                if (_listenSocket != HSteamListenSocket.Invalid)
+                {
+                    byte assignedId = _nextNetworkId++;
+                    _connToNetId[param.m_hConn] = assignedId;
+
+                    GD.Print($"host: assigning networkdid {assignedId} to steamid {clientSteamId}");
+
+                    SendHandshake(param.m_hConn, assignedId);
+
+                    foreach (var player in _playerList.Values)
+                    {
+                        SendSpawnTo(param.m_hConn, player.NetworkId, player.SteamId, player.GlobalPosition);
+                    }
+
+                    //SpawnPlayer(assignedId, clientSteamId, Vector3.Zero, isLocal: false);
+                    BroadcastSpawn(assignedId, clientSteamId, Vector3.Zero);
+                }
+                OnPlayerConnected?.Invoke(clientSteamId);
+                OnConnectionStatusMessage?.Invoke($"player connected: {clientSteamId}");
+                break;
+
+            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
+            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
+                GD.Print($"connx closed reason: {param.m_info.m_eEndReason}");
+                if (_connToNetId.TryGetValue(param.m_hConn, out byte netId))
+                {
+                    RemovePlayer(netId);
+                    _connToNetId.Remove(param.m_hConn);
+                }
+                CloseConnection(param.m_hConn);
+
+                OnPlayerDisconnected?.Invoke(clientSteamId);
+                OnConnectionStatusMessage?.Invoke($"player disconnected {clientSteamId}");
+                break;
+        }
+    }
+
+    public void StartGameAsHost()
+    {
+        _localNetworkId = 0;
+       // SpawnPlayer(0, SteamUser.GetSteamID(), new Vector3(0, 2, 0), isLocal: true);
+    }
+    
+    private void SpawnPlayer(byte netId, CSteamID steamId, Vector3 pos, bool isLocal)
+    {
+        if (_playerList.ContainsKey(netId)) return;
+
+        var p = _playerScene.Instantiate<NetworkedPlayer>();
+        p.Name = $"Player_{netId}";
+        p.NetworkId = netId;
+        p.SteamId = steamId;
+        p.IsLocalPlayer = isLocal;
+        p.Position = pos;
+
+        _spawnParent.AddChild(p);
+        _playerList.Add(netId, p);
+        
+        GD.Print($"spawned player with netid {netId} (local: {isLocal}");
+    }
+
+    private void RemovePlayer(byte netId)
+    {
+        if (_playerList.TryGetValue(netId, out NetworkedPlayer p))
+        {
+            p.QueueFree();
+            _playerList.Remove(netId);
+        }
+    }
+
+
+    public void SendBytesTo(HSteamNetConnection conn, byte[] data,
+        int flags = Constants.k_nSteamNetworkingSend_Reliable)
+    {
+        if (conn == HSteamNetConnection.Invalid) return;
+        
+        GCHandle pinnedArray = GCHandle.Alloc(data, GCHandleType.Pinned);
+        IntPtr dataPtr = pinnedArray.AddrOfPinnedObject();
+
+        SteamNetworkingSockets.SendMessageToConnection(
+            conn, 
+            dataPtr, 
+            (uint) data.Length, 
+            flags, 
+            out long _);
+
+        pinnedArray.Free();
+        
+    }
+
+    public void SendBytesToAll(byte[] data, int flags = Constants.k_nSteamNetworkingSend_Reliable)
+    {
+        foreach (HSteamNetConnection conn in _connections)
+        {
+            SendBytesTo(conn, data, flags);
+        }
+    }
+
+
+    private void PollIncomingMessages()
+    {
+        for (int i = _connections.Count - 1; i >= 0; --i)
+        {
+            var conn = _connections[i];
+            if (conn == HSteamNetConnection.Invalid) continue;
+
+            IntPtr[] msgBuffer = new IntPtr[KMaxMessagesPerPoll];
+
+            int numMsgs = SteamNetworkingSockets.ReceiveMessagesOnConnection(conn, msgBuffer, KMaxMessagesPerPoll);
+            
+            for (int j = 0; j < numMsgs; j++)
+            {
+                try
+                {
+                    ProcessMessage(msgBuffer[j]);
+                }
+                catch (Exception e)
+                {
+                    GD.PrintErr($"failed to process packet: {e.Message}");
+                }
+                finally
+                {
+                    SteamNetworkingMessage_t.Release(msgBuffer[j]);
+                }
+            }
+        }
+    }
+
+    private void ProcessMessage(IntPtr msgPtr)
+    {
+        var netMsg = Marshal.PtrToStructure<SteamNetworkingMessage_t>(msgPtr);
+
+        byte[] data = new byte[netMsg.m_cbSize];
+        Marshal.Copy(netMsg.m_pData, data, 0, netMsg.m_cbSize);
+
+        CSteamID senderSteamId = netMsg.m_identityPeer.GetSteamID();
+
+        using MemoryStream ms = new(data);
+        using BinaryReader reader = new(ms);
+
+        PacketType type = (PacketType) reader.ReadByte();
+
+
+        switch (type)
+        {
+            case PacketType.Handshake:
+                _localNetworkId = reader.ReadByte();
+                GD.Print($"client: i have been assigned netidd: {_localNetworkId}");
+                    // SpawnPlayer(_localNetworkId, SteamUser.GetSteamID(), Vector3.Zero, true);
+                break;
+            
+            case PacketType.SpawnPlayer:
+                byte spawnNetId = reader.ReadByte();
+                ulong spawnSteamId = reader.ReadUInt64();
+                Vector3 spawnPos = reader.ReadVector3();
+
+                if (spawnNetId != _localNetworkId && !_playerList.ContainsKey(spawnNetId))
+                {
+                    //SpawnPlayer(spawnNetId, (CSteamID)spawnSteamId, spawnPos, false);
+                }
+
+                break;
+            case PacketType.PlayerUpdate:
+                byte updateNetId = reader.ReadByte();
+                Vector3 newPos = reader.ReadVector3();
+                Vector3 newRot = reader.ReadVector3();
+
+                if (_playerList.TryGetValue(updateNetId, out NetworkedPlayer p))
+                {
+                    if (!p.IsLocalPlayer)
+                    {
+                        p.UpdateRemoteState(newPos, newRot);
+                    }
+                }
+
+                if (_listenSocket != HSteamListenSocket.Invalid)
+                {
+                    SendBytesToAll(data, Constants.k_nSteamNetworkingSend_Unreliable);
+                }
+
+                break;
+            case PacketType.ClassSelected:
+                //class selection stuff
+                break;
+            case PacketType.AbilityCast:
+                byte playerNetId = reader.ReadByte();
+                string abilityName = reader.ReadString();
+                HandleAbilityCast(playerNetId, abilityName);
+                break;
+                
+        }
+        
+    }
+
+    private void SendHandshake(HSteamNetConnection target, byte assignedId)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.Handshake);
+        writer.Write(assignedId);
+        SendBytesTo(target, ms.ToArray(), Constants.k_nSteamNetworkingSend_Reliable);
+    }
+
+    private void HandleAbilityCast(byte netId, string abilityName)
+    {
+        if (_playerList.ContainsKey(netId))
+        {
+            NetworkedPlayer playerNode = _playerList[netId];
+            playerNode.GetNode<AbilityController>("AbilityController").ExecuteVisualsOnly(abilityName);
+        }
+    }
+
+    private void BroadcastSpawn(byte netId, CSteamID steamId, Vector3 pos)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.SpawnPlayer);
+        writer.Write(netId);
+        writer.Write(steamId.m_SteamID);
+        writer.Write(pos);
+        SendBytesToAll(ms.ToArray(), Constants.k_nSteamNetworkingSend_Reliable);
+    }
+
+    private void SendSpawnTo(HSteamNetConnection target, byte netId, CSteamID steamId, Vector3 pos)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.SpawnPlayer);
+        writer.Write(netId);
+        writer.Write(steamId.m_SteamID);
+        writer.Write(pos);
+        SendBytesTo(target, ms.ToArray(), Constants.k_nSteamNetworkingSend_Reliable);
+    }
+
+    public void CloseConnection(HSteamNetConnection conn)
+    {
+        if (_connections.Contains(conn))
+        {
+            SteamNetworkingSockets.CloseConnection(conn, 0, "Closing", false);
+            _connections.Remove(conn);
+            GD.Print($"connx {conn.m_HSteamNetConnection} removed.");
+        }
+    }
+
+    public void ShutdownAll()
+    {
+        foreach (var conn in _connections)
+        {
+            SteamNetworkingSockets.CloseConnection(conn, 0, "shutting down", false);
         }
 
-        _steamIdToPlayerId.Clear();
-        _playerIdToSteamId.Clear();
+        _connections.Clear();
+
+        if (_listenSocket != HSteamListenSocket.Invalid)
+        {
+            SteamNetworkingSockets.CloseListenSocket(_listenSocket);
+            _listenSocket = HSteamListenSocket.Invalid;
+        }
+    }
+    
+    
+    public override void _ExitTree()
+    {
+        ShutdownAll();
+
+        SteamAPI.Shutdown();
+
     }
 
-    public int GetPlayerId(CSteamID steamId)
-    {
-        return _steamIdToPlayerId.GetValueOrDefault(steamId, -1);
-    }
 
-    public CSteamID GetSteamId(int playerId)
-    {
-        return _playerIdToSteamId.TryGetValue(playerId, out CSteamID id) ? id : CSteamID.Nil;
-    }
-
-    public string GetLocalSteamIdString()
-    {
-        return LocalSteamId.m_SteamID.ToString();
-    }
-
-    public Dictionary<int, CSteamID> GetAllPlayers()
-    {
-        return new Dictionary<int, CSteamID>(_playerIdToSteamId);
-    }
 }
 
-public enum PacketType : byte
+public struct LobbyInfo
 {
-    ConnectionRequest = 0,
-    AssignPlayerId = 1,
-    PlayerJoined = 2,
-    PlayerLeft = 3,
-    GameData  = 4
+    public ulong LobbyId;
+    public string Name;
+    public int PlayerCount;
+    public int MaxPlayers;
 }

@@ -1,29 +1,25 @@
 using Godot;
 using System;
+using System.IO;
+using BattleGlorps;
 using Steamworks;
 
 public partial class NetworkedPlayer : PlayerClass
 {
-    [Export] public bool IsLocalPlayer { get; set; } = true;
-    public int NetworkId { get; set; } = -1;
-    public CSteamID OwnerSteamId { get; set; }
-
-    private Vector3 _lastSentPosition;
-    private Vector3 _lastSendRotation;
-    private float _networkSyncTimer = 0f;
-    private const float NETWORK_SYNC_RATE = 0.05f;
+    public bool IsLocalPlayer { get; set; } = true;
+    public byte NetworkId { get; set; }
+    public CSteamID SteamId { get; set; }
 
     private Vector3 _targetNetworkPosition;
     private Vector3 _targetNetworkRotation;
-    private float _interpolationSpeed = 10f;
 
-    private SteamNetworkManager _networkManager;
+    private float _interpolationSpeed = 10.0f;
+    private double _sendTimer = 0;
+    private const float NETWORK_SYNC_RATE = 0.05f;
 
     public override void _Ready()
     {
         base._Ready();
-        
-        _networkManager = SteamNetworkManager.Instance;
 
         if (!IsLocalPlayer)
         {
@@ -38,10 +34,10 @@ public partial class NetworkedPlayer : PlayerClass
 
         if (IsLocalPlayer)
         {
-            _networkSyncTimer += (float) delta;
-            if (_networkSyncTimer >= NETWORK_SYNC_RATE)
+            _sendTimer += delta;
+            if (_sendTimer >= NETWORK_SYNC_RATE)
             {
-                _networkSyncTimer = 0f;
+                _sendTimer = 0;
                 SendPositionUpdate();
             }
         }
@@ -52,116 +48,25 @@ public partial class NetworkedPlayer : PlayerClass
         }
     }
 
-    public override void SetTargetPosition(Vector3 position)
-    {
-        if (!IsLocalPlayer) return;
-        base.SetTargetPosition(position);
-
-        SendMovementCommand(position);
-    }
-
     private void SendPositionUpdate()
     {
-        if (_networkManager == null) return;
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
 
-        if ((GlobalPosition - _lastSentPosition).Length() < 0.1f &&
-            (Rotation - _lastSendRotation).Length() < 0.01f) return;
+        writer.Write((byte) PacketType.PlayerUpdate);
+        writer.Write(NetworkId);
+        writer.Write(GlobalPosition);
+        writer.Write(GlobalRotation);
 
-        _lastSentPosition = GlobalPosition;
-        _lastSendRotation = Rotation;
+        byte[] data = ms.ToArray();
 
-        var data = SerializePositionUpdate();
-        _networkManager.BroadcastGameData(data, Steamworks.EP2PSend.k_EP2PSendUnreliable);
+        SteamNetworkManager.Instance.SendBytesToAll(data, Steamworks.Constants.k_nSteamNetworkingSend_Unreliable);
     }
 
-    private void SendMovementCommand(Vector3 targetPos)
+    public void UpdateRemoteState(Vector3 newPos, Vector3 newRot)
     {
-        if (_networkManager == null) return;
-
-        var data = SerializeMovementCommand(targetPos);
-        _networkManager.BroadcastGameData(data, Steamworks.EP2PSend.k_EP2PSendUnreliable);
+        _targetNetworkPosition = newPos;
+        _targetNetworkRotation = newRot;
     }
-
-    public void ReceivePositionUpdate(byte[] data)
-    {
-        if (IsLocalPlayer) return;
-
-        int o = 0;
-
-        _targetNetworkPosition = new Vector3(
-            Read(data, ref o),
-            Read(data, ref o),
-            Read(data, ref o)
-        );
-
-        _targetNetworkRotation = new Vector3(
-            Read(data, ref o),
-            Read(data, ref o),
-            Read(data, ref o)
-        );
-    }
-
-    public void ReceiveMovementCommand(byte[] data)
-    {
-        if (IsLocalPlayer) return;
-
-        int o = 0;
-
-        Vector3 targetPos = new Vector3(
-            Read(data, ref o),
-            Read(data, ref o),
-            Read(data, ref o)
-        );
-        
-        base.SetTargetPosition(targetPos);
-    }
-
-    private byte[] SerializePositionUpdate()
-    {
-        byte[] data = new byte[1 + 4 + 24];
-        int offset = 0;
-
-        data[offset++] = (byte)NetworkMessageType.PositionUpdate;
-        BitConverter.GetBytes(NetworkId).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(GlobalPosition.X).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(GlobalPosition.Y).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(GlobalPosition.Z).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(Rotation.X).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(Rotation.Y).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(Rotation.Z).CopyTo(data, offset); 
-
-        return data;
-    }
-
-    public byte[] SerializeMovementCommand(Vector3 targetPos)
-    {
-        byte[] data = new byte[1 + 4 + 12];
-        int offset = 0;
-
-        data[offset++] = (byte) NetworkMessageType.MovementCommand;
-        BitConverter.GetBytes(NetworkId).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(targetPos.X).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(targetPos.Y).CopyTo(data, offset); offset += 4;
-        BitConverter.GetBytes(targetPos.Z).CopyTo(data, offset);
-
-        return data;
-
-    }
-
-    private static float Read(byte[] data, ref int o)
-    {
-        float v = BitConverter.ToSingle(data, o);
-        o += 4;
-        return v;
-    }
+    
 }
-
-public enum NetworkMessageType : byte
-{
-    PositionUpdate = 0,
-    MovementCommand = 1,
-    SpawnClass = 4,
-    DestroyClass = 5
-}
-
-

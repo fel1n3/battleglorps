@@ -5,14 +5,9 @@ using System.Collections.Generic;
 public partial class PlayerClass : CharacterBody3D
 {
     [Export] public ClassData ClassData { get; set; }
-    [Export] public float MoveSpeed = 5.0f;
-    [Export] public float RotationSpeed = 10.0f;
-    [Export] public float StoppingDistance = 0.5f;
 
     public float CurrentHealth { get; private set; }
     public float CurrentMana { get; private set; }
-    
-    public List<Ability> Abilities { get; private set; }
 
     private Vector3 _targetPosition;
     private bool _hasTarget = false;
@@ -96,7 +91,7 @@ public partial class PlayerClass : CharacterBody3D
             Vector3 direction = (_targetPosition - GlobalPosition);
             float distance = direction.Length();
 
-            if (distance > StoppingDistance)
+            if (distance > ClassData.StoppingDistance)
             {
                 direction = direction.Normalized();
 
@@ -107,11 +102,11 @@ public partial class PlayerClass : CharacterBody3D
                     {
                         Quaternion targetRotation = Quaternion.FromEuler(new Vector3(0, Mathf.Atan2(lookDir.X, lookDir.Z), 0));
                         Quaternion currentRotation = Quaternion.FromEuler(Rotation);
-                        Rotation = currentRotation.Slerp(targetRotation, RotationSpeed *(float)delta).GetEuler();
+                        Rotation = currentRotation.Slerp(targetRotation, ClassData.RotationSpeed *(float)delta).GetEuler();
                     }
                 }
 
-                Velocity = direction * MoveSpeed;
+                Velocity = direction * ClassData.MoveSpeed;
                 MoveAndSlide();
             }
             else
