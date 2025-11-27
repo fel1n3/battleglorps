@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3 uid="uid://be3femxh64k2t"]
 
-[ext_resource type="Script" uid="uid://b2vtpn4utk1y0" path="res://NetworkedPlayer.cs" id="1_4flbx"]
-[ext_resource type="Resource" uid="uid://dythg5ewbt30g" path="res://Classes/mage.tres" id="2_onrkg"]
+[ext_resource type="Script" uid="uid://b2vtpn4utk1y0" path="res://Networking/NetworkedPlayer.cs" id="1_4flbx"]
+[ext_resource type="Resource" uid="uid://dythg5ewbt30g" path="res://Resources/Classes/mage.tres" id="2_onrkg"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]
 
