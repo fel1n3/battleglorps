@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3 uid="uid://c1hdowd3src6x"]
 
-[ext_resource type="Script" uid="uid://1nxge02ec3wg" path="res://CameraController.cs" id="1_h2yge"]
-[ext_resource type="Script" uid="uid://dj7pkxnjhebd5" path="res://NetworkedInputManager.cs" id="2_0xm2m"]
+[ext_resource type="Script" uid="uid://1nxge02ec3wg" path="res://Entities/Player/CameraController.cs" id="1_h2yge"]
+[ext_resource type="Script" uid="uid://dj7pkxnjhebd5" path="res://Networking/NetworkedInputManager.cs" id="2_0xm2m"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7dm0k"]
 size = Vector3(60, 2, 60)
