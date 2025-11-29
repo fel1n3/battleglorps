@@ -68,5 +68,10 @@ public partial class NetworkedPlayer : PlayerClass
         _targetNetworkPosition = newPos;
         _targetNetworkRotation = newRot;
     }
+
+    public void InitializeClass(ClassData data)
+    {
+        //TODO setup stuff idk
+    }
     
 }

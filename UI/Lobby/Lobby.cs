@@ -5,7 +5,6 @@ using System.Collections.Generic;
 public partial class Lobby : Control
 {
     [Export] private PackedScene _classCardPrefab;
-    [Export] private ClassData[] _availableClasses;
 
     [Export] private GridContainer _grid;
     [Export] private Label _descriptionLabel;
@@ -17,18 +16,20 @@ public partial class Lobby : Control
 
     public override void _Ready()
     {
-        GenerateGrid();
+        var availableClasses = SteamNetworkManager.Instance.GetAllClasses();
+        
+        GenerateGrid(availableClasses);
        // _startButton.Pressed += OnStartGamePressed;
     }
 
-    private void GenerateGrid()
+    private void GenerateGrid(ClassData[] availableClasses)
     {
         foreach(Node child in _grid.GetChildren()) child.QueueFree();
         _cards.Clear();
 
-        foreach(var data in _availableClasses)
+        foreach(ClassData data in availableClasses)
         {
-            var cardInstance = _classCardPrefab.Instantiate<ClassCard>();
+            ClassCard cardInstance = _classCardPrefab.Instantiate<ClassCard>();
             _grid.AddChild(cardInstance);
 
             cardInstance.Setup(data);

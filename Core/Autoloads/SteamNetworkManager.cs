@@ -16,6 +16,8 @@ public partial class SteamNetworkManager : Node
     public event Action<CSteamID> OnPlayerDisconnected;
     public event Action<string> OnChatMessageReceived;
     public event Action<string> OnConnectionStatusMessage;
+    public event Action<byte, int> OnPlayerChangedClass; //network id, classindex
+    public event Action OnGameStart;
     
     
     private HSteamListenSocket _listenSocket = HSteamListenSocket.Invalid;
@@ -36,9 +38,21 @@ public partial class SteamNetworkManager : Node
     [Export] private Node3D _spawnParent;
     private Dictionary<byte, NetworkedPlayer> _playerList = new();
     private Dictionary<HSteamNetConnection, byte> _connToNetId = new();
+
+    private ClassData[] _allClasses;
+    
     public override void _Ready()
     {
         Instance = this;
+
+        var classList = LoadClassesFromFolder("res://Resources/Classes");
+
+        if (classList.Count == 0)
+        {
+            GD.PrintErr("no classes found? :(");
+        }
+
+        _allClasses = classList.ToArray();
 
         GD.Print("init steam api");
 
@@ -53,6 +67,54 @@ public partial class SteamNetworkManager : Node
 
         _gameLobbyJoinRequested = Callback<GameLobbyJoinRequested_t>.Create(OnGameLobbyJoinRequested);
         
+    }
+
+    public ClassData[] GetAllClasses()
+    {
+        return _allClasses;
+    }
+
+    private List<ClassData> LoadClassesFromFolder(string path)
+    {
+        List<ClassData> loadedClasses = [];
+
+        using var dir = DirAccess.Open(path);
+        if (dir == null)
+        {
+            GD.PrintErr($"could not open directory: {path}");
+            return loadedClasses;
+        }
+
+        dir.ListDirBegin();
+        string fileName = dir.GetNext();
+
+        while (fileName != "")
+        {
+            if (!dir.CurrentIsDir())
+            {
+                if (fileName.EndsWith(".remap"))
+                {
+                    fileName = fileName.TrimSuffix(".remap");
+                }
+
+                if (fileName.EndsWith(".tres"))
+                {
+                    string fullPath = path + "/" + fileName;
+                    var res = ResourceLoader.Load<ClassData>(fullPath);
+
+                    if (res != null)
+                    {
+                        loadedClasses.Add(res);
+                    }
+                }
+            }
+
+            fileName = dir.GetNext();
+        }
+        
+        loadedClasses.Sort((a,b) => string.Compare(a.ClassName, b.ClassName, StringComparison.Ordinal));
+        GD.Print($"loaded {loadedClasses.Count} classes from {path}");
+        return loadedClasses;
     }
 
     private void CreateP2PHost()
@@ -249,6 +311,60 @@ public partial class SteamNetworkManager : Node
         }
     }
 
+    public void SendClassSelection(int classIndex)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        
+        writer.Write((byte)PacketType.ClassSelected);
+        writer.Write(_localNetworkId);
+        writer.Write(classIndex);
+
+        if (_listenSocket != HSteamListenSocket.Invalid)
+        {
+            HandleClassSelection(_localNetworkId, classIndex);
+            SendBytesToAll(ms.ToArray());
+        }
+        else
+        {
+            SendBytesTo(_connections[0], ms.ToArray());
+        }
+    }
+
+    public void SendStartGame()
+    {
+        if (_listenSocket == HSteamListenSocket.Invalid) return;
+
+        using MemoryStream ms = new();
+        using BinaryWriter write = new(ms);
+        write.Write((byte) PacketType.GameStart);
+        
+        SendBytesToAll(ms.ToArray());
+
+        OnGameStart?.Invoke();
+    }
+
+    public void SendAbilityCast(string abilityName)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+
+        writer.Write((byte) PacketType.AbilityCast);
+        writer.Write(_localNetworkId);
+        writer.Write(abilityName);
+
+        byte[] data = ms.ToArray();
+
+        if (_listenSocket != HSteamListenSocket.Invalid)
+        {
+            SendBytesToAll(data);
+        }
+        else
+        {
+            SendBytesTo(_connections[0], data);
+        }
+    }
+
     public void StartGameAsHost()
     {
         _localNetworkId = 0;
@@ -268,6 +384,7 @@ public partial class SteamNetworkManager : Node
 
         _spawnParent.AddChild(p);
         _playerList.Add(netId, p);
+        
         
         GD.Print($"spawned player with netid {netId} (local: {isLocal}");
     }
