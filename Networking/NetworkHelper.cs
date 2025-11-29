@@ -1,4 +1,6 @@
-﻿namespace BattleGlorps;
+﻿using Steamworks;
+
+namespace BattleGlorps;
 
 using Godot;
 using System.IO;
@@ -6,10 +8,10 @@ using System.IO;
 public enum PacketType : byte
 {
     Handshake = 0,
-    SpawnPlayer = 1,
-    PlayerUpdate = 2,
-    ClassSelected = 3,
-    GameStart = 4,
+    SessionSync = 1,
+    GameStart = 2,
+    PlayerUpdate = 3,
+    ClassSelected = 4,
     AbilityCast=5,
 }
 public struct LobbyInfo
@@ -18,6 +20,14 @@ public struct LobbyInfo
     public string Name;
     public int PlayerCount;
     public int MaxPlayers;
+}
+
+public class PlayerSession
+{
+    public byte NetworkId;
+    public CSteamID SteamId;
+    public int SelectedClassIndex;
+    public string Name;
 }
 
 public static class NetworkHelper

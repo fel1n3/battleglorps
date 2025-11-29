@@ -11,13 +11,13 @@ config_version=5
 [application]
 
 config/name="BattleGlorps"
-run/main_scene="uid://kvsdqb1eenpm"
+run/main_scene="uid://da8ouwnushctl"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 config/icon="uid://btvs2gkq64bj7"
 
 [autoload]
 
-SteamNetworkManager="*uid://cqngmmvj8grqm"
+SteamManager="*uid://byh15jyy63bf7"
 
 [dotnet]
 

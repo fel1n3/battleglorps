@@ -11,8 +11,6 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         
-        
-        
         _hostButton.Pressed += OnHostPressed;
 
         CallDeferred(nameof(SubscribeToEvents));
@@ -40,7 +38,7 @@ public partial class MainMenu : Control
         
         SteamManager.Instance.GameState.StartGameAsHost();
 
-        GetTree().ChangeSceneToFile("res://Lobby.tscn");
+        GetTree().ChangeSceneToFile("res://UI/Lobby/Lobby.tscn");
         //_mainMenuContainer.Visible = false;
         //_classSelect.Visible = true;
 

@@ -20,6 +20,8 @@ public partial class GameNetworkState : Node
     private Dictionary<byte, NetworkedPlayer> _playerList = new();
     private Dictionary<CSteamID, byte> _steamToNetId = new();
     private Dictionary<byte, int> _playerClassSelections = new(); //netid -> classindex
+    private Dictionary<byte, PlayerSession> _sessions = new();
+    private Dictionary<byte, NetworkedPlayer> _activeNodes = new();
 
     public override void _Ready()
     {
@@ -30,7 +32,7 @@ public partial class GameNetworkState : Node
     {
         _localNetId = 0;
         _playerClassSelections[0] = 0;
-        SpawnPlayer(0, SteamUser.GetSteamID(), new Vector3(0, 2, 0), true);
+        //SpawnPlayer(0, SteamUser.GetSteamID(), new Vector3(0, 2, 0), true);
     }
 
     public void OnPeerConnected(CSteamID peerId)
@@ -39,13 +41,26 @@ public partial class GameNetworkState : Node
 
         byte newId = _nextNetId++;
         GD.Print($"[Host] peer connected. assigning id {newId}");
+        if (!_sessions.ContainsKey(newId))
+        {
+            _sessions.Add(newId, new PlayerSession
+            {
+                NetworkId = newId,
+                SteamId = peerId,
+                Name = SteamFriends.GetFriendPersonaName(peerId),
+                SelectedClassIndex = 0
+            });
+        }
 
         SendHandshake(peerId, newId);
 
-        foreach (var kvp in _playerList)
+        foreach (var session in _sessions.Values)
         {
-            SendSpawnTo(peerId, kvp.Key, kvp.Value.SteamId, kvp.Value.Position, _playerClassSelections[kvp.Key]);
+            if (session.NetworkId == newId) continue;
+            SendSessionDataTo(peerId, session);
         }
+
+        BroadcastSessionData(_sessions[newId]);
     }
 
     public void OnPeerDisconnected(CSteamID peerId)
@@ -69,23 +84,39 @@ public partial class GameNetworkState : Node
             case PacketType.Handshake:
                 _localNetId = reader.ReadByte();
                 GD.Print($"[Client] got handshake. my id: {_localNetId}");
+
+                if (!_sessions.ContainsKey(_localNetId))
+                {
+                    _sessions.Add(_localNetId, new PlayerSession
+                    {
+                        NetworkId = _localNetId,
+                        SteamId = SteamUser.GetSteamID(),
+                        Name = SteamFriends.GetPersonaName()
+                    });
+                }
                 break;
-            case PacketType.SpawnPlayer:
+            case PacketType.SessionSync:
                 byte netId = reader.ReadByte();
                 ulong steamId = reader.ReadUInt64();
-                Vector3 pos = reader.ReadVector3();
                 int classIdx = reader.ReadInt32();
 
-                if (netId == _localNetId)
+                if (!_sessions.ContainsKey(netId))
                 {
-                    //its me
-                    SpawnPlayer(netId, (CSteamID) steamId, pos, true, classIdx);
+                    _sessions.Add(netId, new PlayerSession
+                    {
+                        NetworkId = netId,
+                        SteamId = (CSteamID)steamId,
+                        SelectedClassIndex = classIdx
+                    });
                 }
-                else if (!_playerList.ContainsKey(netId))
+                else
                 {
-                    SpawnPlayer(netId, (CSteamID) steamId, pos, false, classIdx);
+                    _sessions[netId].SelectedClassIndex = classIdx;
                 }
-
+                break;
+            case PacketType.GameStart:
+                string mapPath = reader.ReadString();
+                LoadGameScene(mapPath);
                 break;
             case PacketType.PlayerUpdate:
                 byte updateId = reader.ReadByte();
@@ -127,30 +158,83 @@ public partial class GameNetworkState : Node
     }
     public void SelectClass(int classIndex)
     {
+        if(_sessions.TryGetValue(_localNetId, out PlayerSession session))
+        {
+            session.SelectedClassIndex = classIndex;
+        }
+
+        BroadcastSessionData(_sessions[_localNetId]);
+    }
+
+    public void RequestStartGame()
+    {
+        if (!SteamManager.Instance.Connection.IsHost) return;
+
+        string map = "res://main.tscn";
+
         using MemoryStream ms = new();
         using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.GameStart);
+        writer.Write(map);
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
 
-        writer.Write((byte) PacketType.ClassSelected);
-        writer.Write(_localNetId);
-        writer.Write(classIndex);
+        LoadGameScene(map);
+    }
 
-        if (SteamManager.Instance.Connection.IsHost)
+    private void LoadGameScene(string path)
+    {
+        GetTree().ChangeSceneToFile(path);
+        
+    }
+
+    public void SpawnAllPlayers(Node3D rootSpawnNode)
+    {
+        GD.Print($"spawning {_sessions.Count} players.....");
+
+        foreach (var session in _sessions.Values)
         {
-            _playerClassSelections[_localNetId] = classIndex;
-            SteamManager.Instance.Connection.SendToAll(ms.ToArray());
-        }
-        else
-        {
-            SteamManager.Instance.Connection.SendToAll(ms.ToArray());
+            if (_activeNodes.ContainsKey(session.NetworkId)) continue;
+
+            var p = _playerScene.Instantiate<NetworkedPlayer>();
+            p.Name = $"Player_{session.NetworkId}";
+            p.NetworkId = session.NetworkId;
+            p.SteamId = session.SteamId;
+            p.IsLocalPlayer = (session.NetworkId == _localNetId);
+
+            p.Position = new Vector3(session.NetworkId * 2, 2, 0);
+
+            rootSpawnNode.AddChild(p);
+            _activeNodes.Add(session.NetworkId, p);
+
+            if (session.SelectedClassIndex < _loadedClasses.Length)
+            {
+                p.InitializeClass(_loadedClasses[session.SelectedClassIndex]);
+            }
         }
     }
 
-    public void RequestSpawn()
+    private void BroadcastSessionData(PlayerSession s)
     {
-        if (SteamManager.Instance.Connection.IsHost)
-        {
-            BroadcastSpawn(_localNetId, SteamUser.GetSteamID(), Vector3.Zero, _playerClassSelections[_localNetId]);
-        }
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.SessionSync);
+        writer.Write(s.NetworkId);
+        writer.Write(s.SteamId.m_SteamID);
+        writer.Write(s.SelectedClassIndex);
+
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
+    }
+
+    private void SendSessionDataTo(CSteamID target, PlayerSession s)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.SessionSync);
+        writer.Write(s.NetworkId);
+        writer.Write(s.SteamId.m_SteamID);
+        writer.Write(s.SelectedClassIndex);
+
+        SteamManager.Instance.Connection.SendToPeer(target, ms.ToArray());
     }
 
     private void SpawnPlayer(byte netId, CSteamID steamId, Vector3 pos, bool isLocal, int classIdx = 0)
@@ -182,31 +266,7 @@ public partial class GameNetworkState : Node
         writer.Write(netId);
         SteamManager.Instance.Connection.SendToPeer(target, ms.ToArray());
     }
-
-    private void BroadcastSpawn(byte netId, CSteamID steamId, Vector3 pos, int classIdx)
-    {
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
-        writer.Write((byte) PacketType.SpawnPlayer);
-        writer.Write(netId);
-        writer.Write(steamId.m_SteamID);
-        writer.Write(pos);
-        writer.Write(classIdx);
-        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
-    }
-
-    private void SendSpawnTo(CSteamID target, byte netid, CSteamID steamId, Vector3 pos, int classIdx)
-    {
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
-        writer.Write((byte) PacketType.SpawnPlayer);
-        writer.Write(netid);
-        writer.Write(steamId.m_SteamID);
-        writer.Write(pos);
-        writer.Write(classIdx);
-        SteamManager.Instance.Connection.SendToPeer(target, ms.ToArray());
-    }
-
+    
     private ClassData[] LoadClasses(string path)
     {
         var list = new List<ClassData>();
