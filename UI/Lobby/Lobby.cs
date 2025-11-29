@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using BattleGlorps.Core.Autoloads;
 
 public partial class Lobby : Control
 {
@@ -16,8 +17,7 @@ public partial class Lobby : Control
 
     public override void _Ready()
     {
-        var availableClasses = SteamNetworkManager.Instance.GetAllClasses();
-        
+        var availableClasses = SteamManager.Instance.GameState.GetAllClasses();        
         GenerateGrid(availableClasses);
        // _startButton.Pressed += OnStartGamePressed;
     }

@@ -1,5 +1,7 @@
 ﻿using System.IO;
+using BattleGlorps.Core.Autoloads;
 using Godot;
+using Steamworks;
 
 namespace BattleGlorps.Classes;
 
@@ -34,7 +36,7 @@ public partial class AbilityController : Node3D
         writer.Write((byte) PacketType.AbilityCast);
         writer.Write(AbilityToCast.AbilityName);
 
-        SteamNetworkManager.Instance.SendBytesToAll(ms.ToArray());
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
     }
 
     public void ExecuteVisualsOnly(string abilityName)

@@ -12,6 +12,13 @@ public enum PacketType : byte
     GameStart = 4,
     AbilityCast=5,
 }
+public struct LobbyInfo
+{
+    public ulong LobbyId;
+    public string Name;
+    public int PlayerCount;
+    public int MaxPlayers;
+}
 
 public static class NetworkHelper
 {
@@ -27,5 +34,8 @@ public static class NetworkHelper
     {
         return new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
     }
+    
+    
+
     
 }

@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.IO;
 using BattleGlorps;
+using BattleGlorps.Core.Autoloads;
 using Steamworks;
 
 public partial class NetworkedPlayer : PlayerClass
@@ -60,7 +61,7 @@ public partial class NetworkedPlayer : PlayerClass
 
         byte[] data = ms.ToArray();
 
-        SteamNetworkManager.Instance.SendBytesToAll(data, Steamworks.Constants.k_nSteamNetworkingSend_Unreliable);
+        SteamManager.Instance.Connection.SendToAll(data, Steamworks.Constants.k_nSteamNetworkingSend_Unreliable);
     }
 
     public void UpdateRemoteState(Vector3 newPos, Vector3 newRot)
@@ -72,6 +73,11 @@ public partial class NetworkedPlayer : PlayerClass
     public void InitializeClass(ClassData data)
     {
         //TODO setup stuff idk
+    }
+
+    public void TriggerAbilityVisuals(string abilityName)
+    {
+        //TODO xd
     }
     
 }

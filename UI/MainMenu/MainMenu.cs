@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using BattleGlorps.Core.Autoloads;
 using Steamworks;
 
 public partial class MainMenu : Control
@@ -20,7 +21,7 @@ public partial class MainMenu : Control
 
     private void SubscribeToEvents()
     {
-        if (SteamNetworkManager.Instance == null)
+        if (SteamManager.Instance == null)
         {
             GD.PrintErr("steamnetworkmanager instance is null.");
             return;
@@ -35,9 +36,9 @@ public partial class MainMenu : Control
 
     private void OnHostPressed()
     {
-        SteamNetworkManager.Instance.CreateLobby();
+        SteamManager.Instance.Lobby.CreateLobby();
         
-        SteamNetworkManager.Instance.StartGameAsHost();
+        SteamManager.Instance.GameState.StartGameAsHost();
 
         GetTree().ChangeSceneToFile("res://Lobby.tscn");
         //_mainMenuContainer.Visible = false;
