@@ -147,12 +147,25 @@ public partial class GameNetworkState : Node
 
                 if (_playerList.TryGetValue(casterId, out var caster))
                 {
-                    caster.TriggerAbilityVisuals(abilityName);
+                   // caster.TriggerAbilityVisuals(abilityName);
                 }
 
                 if (SteamManager.Instance.Connection.IsHost) 
                     SteamManager.Instance.Connection.SendToAll(data);
                 break;
+            case PacketType.MoveCommand:
+                if(!SteamManager.Instance.Connection.IsHost) return;
+
+                byte playerId = reader.ReadByte();
+                Vector3 targetPos = reader.ReadVector3();
+
+                if (_playerList.TryGetValue(playerId, out NetworkedPlayer playerNode))
+                {
+                    playerNode.Server_SetMoveTarget(targetPos);
+                }
+
+                break;
+                
         }
         
     }

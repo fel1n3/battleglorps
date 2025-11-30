@@ -1,80 +1,78 @@
 using Godot;
 using System;
+using System.IO;
+using BattleGlorps;
+using BattleGlorps.Core.Autoloads;
 using Godot.Collections;
+using Steamworks;
 
 public partial class NetworkedInputManager : Node3D
 {
-    private CameraController _cameraController;
     private NetworkedPlayer _localPlayer;
     private Camera3D _camera;
-    private bool _isRMBHeld = false;
 
-    public override void _Ready()
-    {
-        _cameraController = GetNode<CameraController>("/root/Main/CameraController");
-        _camera = GetViewport().GetCamera3D();
-    }
-
-    public void SetLocalPlayer(NetworkedPlayer player)
+    public void Initialize(NetworkedPlayer player, Camera3D cam)
     {
         _localPlayer = player;
-        GD.Print("local player set for input manager");
-    }
-
-    public override void _Process(double delta)
-    {
-        if (_localPlayer == null) return;
-        
-        if (_isRMBHeld)
-        {
-            Vector2 mousePos = GetViewport().GetMousePosition();
-            Vector3? hitPos = GetMouseWorldPosition(mousePos);
-            if (hitPos.HasValue)
-            {
-                _localPlayer.SetTargetPosition(hitPos.Value);
-            }
-        }
+        _camera = cam;
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_localPlayer == null) return;
+        if(_localPlayer == null || _camera == null) return;
+        
         if (@event is InputEventMouseButton mouseButton)
         {
             if (mouseButton.ButtonIndex == MouseButton.Right)
             {
-                _isRMBHeld = mouseButton.Pressed;
-
-                if (mouseButton.Pressed)
-                {
-                    Vector3? hitPosition = GetMouseWorldPosition(mouseButton.Position);
-                    if (hitPosition.HasValue)
-                    {
-                        _localPlayer.SetTargetPosition(hitPosition.Value);
-                    }
-                }
+                HandleRightClick();
             }
         }
     }
 
-    private Vector3? GetMouseWorldPosition(Vector2 mousePosition)
+
+    private void HandleRightClick()
     {
-        if (_camera == null) return null;
+        var mousePos = GetViewport().GetMousePosition();
+        var from = _camera.ProjectRayOrigin(mousePos);
+        var to = from + _camera.ProjectRayNormal(mousePos) * 1000f;
 
-        Vector3 from = _camera.ProjectRayOrigin(mousePosition);
-        Vector3 to = from + _camera.ProjectRayNormal(mousePosition) * 1000;
-
-        PhysicsDirectSpaceState3D spaceState = GetWorld3D().DirectSpaceState;
-        PhysicsRayQueryParameters3D query = PhysicsRayQueryParameters3D.Create(from, to);
+        var space = _localPlayer.GetWorld3D().DirectSpaceState;
+        var query = PhysicsRayQueryParameters3D.Create(from, to);
         query.CollideWithAreas = false;
 
-        Dictionary result = spaceState.IntersectRay(query);
+        var result = space.IntersectRay(query);
 
         if (result.Count > 0)
         {
-            return (Vector3) result["position"];
-        }
+            Node collider = (Node) result["collider"];
+            Vector3 hitPos = (Vector3) result["position"];
 
-        return null;
+            SendMovePacket(hitPos);
+            
+        }
+    }
+
+    private void SendMovePacket(Vector3 targetPos)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        
+        writer.Write((byte)PacketType.MoveCommand);
+        writer.Write(_localPlayer.NetworkId);
+        writer.Write(targetPos);
+
+        if (SteamManager.Instance.Connection.IsHost)
+        {
+            _localPlayer.Server_SetMoveTarget(targetPos);
+        }
+        else
+        {
+            SteamManager.Instance.Connection.SendToPeer(
+                SteamManager.Instance.Lobby.CurrentLobbyId,
+                ms.ToArray());
+        }
+        
+        
     }
 }

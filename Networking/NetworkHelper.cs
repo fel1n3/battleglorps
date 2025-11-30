@@ -12,7 +12,8 @@ public enum PacketType : byte
     GameStart = 2,
     PlayerUpdate = 3,
     ClassSelected = 4,
-    AbilityCast=5,
+    AbilityCast = 5,
+    MoveCommand = 6,
 }
 public struct LobbyInfo
 {
