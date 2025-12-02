@@ -10,6 +10,8 @@ namespace BattleGlorps;
 
 public partial class GameNetworkState : Node
 {
+    public event Action OnSessionUpdated;
+    
     [Export] private PackedScene _playerScene;
     [Export] private Node3D _spawnParent;
 
@@ -48,7 +50,8 @@ public partial class GameNetworkState : Node
                 NetworkId = newId,
                 SteamId = peerId,
                 Name = SteamFriends.GetFriendPersonaName(peerId),
-                SelectedClassIndex = 0
+                SelectedClassIndex = 0,
+                IsReady = false
             });
         }
 
@@ -99,6 +102,7 @@ public partial class GameNetworkState : Node
                 byte netId = reader.ReadByte();
                 ulong steamId = reader.ReadUInt64();
                 int classIdx = reader.ReadInt32();
+                bool rdy = reader.ReadBoolean();
 
                 if (!_sessions.ContainsKey(netId))
                 {
@@ -106,13 +110,17 @@ public partial class GameNetworkState : Node
                     {
                         NetworkId = netId,
                         SteamId = (CSteamID)steamId,
-                        SelectedClassIndex = classIdx
+                        Name = SteamFriends.GetFriendPersonaName((CSteamID)steamId),
+                        SelectedClassIndex = classIdx,
+                        IsReady = rdy
                     });
                 }
                 else
                 {
                     _sessions[netId].SelectedClassIndex = classIdx;
+                    _sessions[netId].IsReady = rdy;
                 }
+                OnSessionUpdated?.Invoke();
                 break;
             case PacketType.GameStart:
                 string mapPath = reader.ReadString();
@@ -135,11 +143,15 @@ public partial class GameNetworkState : Node
                 byte pId = reader.ReadByte();
                 int cIdx = reader.ReadInt32();
 
-                _playerClassSelections[pId] = cIdx;
-                GD.Print($"player {pId} selected class index {cIdx}");
-
-                if (SteamManager.Instance.Connection.IsHost)
-                    SteamManager.Instance.Connection.SendToAll(data);
+                if (_sessions.TryGetValue(pId, out PlayerSession session))
+                {
+                    session.SelectedClassIndex = cIdx;
+                    OnSessionUpdated?.Invoke();
+                    
+                    if (SteamManager.Instance.Connection.IsHost)
+                        SteamManager.Instance.Connection.SendToAll(data);
+                    
+                }
                 break;
             case PacketType.AbilityCast:
                 byte casterId = reader.ReadByte();
@@ -147,7 +159,7 @@ public partial class GameNetworkState : Node
 
                 if (_playerList.TryGetValue(casterId, out var caster))
                 {
-                   // caster.TriggerAbilityVisuals(abilityName);
+                    //caster.TriggerAbilityVisuals(abilityName);
                 }
 
                 if (SteamManager.Instance.Connection.IsHost) 
@@ -165,9 +177,27 @@ public partial class GameNetworkState : Node
                 }
 
                 break;
+            case PacketType.ReadyStatus:
+                byte rId = reader.ReadByte();
+                bool isReady = reader.ReadBoolean();
+
+                ProcessReadyStatus(rId, isReady);
+                if (SteamManager.Instance.Connection.IsHost) 
+                    SteamManager.Instance.Connection.SendToAll(data);
+                break;
+                
                 
         }
         
+    }
+
+    private void ProcessReadyStatus(byte id, bool ready)
+    {
+        if (_sessions.ContainsKey(id))
+        {
+            _sessions[id].IsReady = ready;
+            OnSessionUpdated?.Invoke();
+        }
     }
     public void SelectClass(int classIndex)
     {
@@ -175,7 +205,7 @@ public partial class GameNetworkState : Node
         {
             session.SelectedClassIndex = classIndex;
         }
-
+        
         BroadcastSessionData(_sessions[_localNetId]);
     }
 
@@ -234,6 +264,7 @@ public partial class GameNetworkState : Node
         writer.Write(s.NetworkId);
         writer.Write(s.SteamId.m_SteamID);
         writer.Write(s.SelectedClassIndex);
+        writer.Write(s.IsReady);
 
         SteamManager.Instance.Connection.SendToAll(ms.ToArray());
     }
@@ -246,7 +277,8 @@ public partial class GameNetworkState : Node
         writer.Write(s.NetworkId);
         writer.Write(s.SteamId.m_SteamID);
         writer.Write(s.SelectedClassIndex);
-
+        writer.Write(s.IsReady);
+        
         SteamManager.Instance.Connection.SendToPeer(target, ms.ToArray());
     }
 
@@ -279,6 +311,26 @@ public partial class GameNetworkState : Node
         writer.Write(netId);
         SteamManager.Instance.Connection.SendToPeer(target, ms.ToArray());
     }
+
+    public void ToggleReady()
+    {
+        if (!_sessions.ContainsKey(_localNetId)) return;
+
+        bool newState = !_sessions[_localNetId].IsReady;
+
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+        writer.Write((byte) PacketType.ReadyStatus);
+        writer.Write(_localNetId);
+        writer.Write(newState);
+
+        if (SteamManager.Instance.Connection.IsHost)
+        {
+            ProcessReadyStatus(_localNetId, newState);
+        }
+
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
+    }
     
     private ClassData[] LoadClasses(string path)
     {
@@ -307,4 +359,6 @@ public partial class GameNetworkState : Node
     {
         return _loadedClasses ?? System.Array.Empty<ClassData>();
     }
+
+    public Dictionary<byte, PlayerSession> GetAllSessions() => _sessions;
 }

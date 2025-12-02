@@ -1,54 +1,81 @@
 using Godot;
-using System;
 using System.Collections.Generic;
+using System.Linq;
+using BattleGlorps;
 using BattleGlorps.Core.Autoloads;
 
 public partial class Lobby : Control
 {
-    [Export] private PackedScene _classCardPrefab;
-
-    [Export] private GridContainer _grid;
-    [Export] private Label _descriptionLabel;
-    [Export] private Node3D _modelPivot;
+    [Export] private PackedScene _playerSlotPrefab;
+    [Export] private Control _playerSlotsContainer;
+    [Export] private ClassSelectModal _selectModal;
+    [Export] private Button _changeClassButton;
+    [Export] private Button _readyButton;
     [Export] private Button _startButton;
 
-    private List<ClassCard> _cards = [];
-    private ClassData _selectedData;
+    private List<LobbyPlayerSlot> _slots = [];
+    private ClassData[] _allClasses;
 
     public override void _Ready()
     {
-        var availableClasses = SteamManager.Instance.GameState.GetAllClasses();        
-        GenerateGrid(availableClasses);
-       // _startButton.Pressed += OnStartGamePressed;
-    }
-
-    private void GenerateGrid(ClassData[] availableClasses)
-    {
-        foreach(Node child in _grid.GetChildren()) child.QueueFree();
-        _cards.Clear();
-
-        foreach(ClassData data in availableClasses)
+        var availableClasses = SteamManager.Instance.GameState.GetAllClasses();
+        for (int i = 0; i < 2; i++)
         {
-            ClassCard cardInstance = _classCardPrefab.Instantiate<ClassCard>();
-            _grid.AddChild(cardInstance);
-
-            cardInstance.Setup(data);
-
-            cardInstance.ClassSelected += OnClassSelected;
-
-            _cards.Add(cardInstance);
+            LobbyPlayerSlot slot = _playerSlotPrefab.Instantiate<LobbyPlayerSlot>();
+            _playerSlotsContainer.AddChild(slot);
+            _slots.Add(slot);
         }
+
+        _changeClassButton.Pressed += () => _selectModal.Visible = true;
+        _readyButton.Pressed += OnReadyPressed;
+        _startButton.Pressed += () => SteamManager.Instance.GameState.RequestStartGame();
+
+        SteamManager.Instance.GameState.OnSessionUpdated += RefreshUI;
+
+        RefreshUI();
     }
 
-    private void OnClassSelected(ClassData data)
+    private void RefreshUI()
     {
-        _selectedData = data;
+        var sessions = SteamManager.Instance.GameState.GetAllSessions();
+        
+        foreach(var slot in _slots) slot.ResetSlot();
 
-       // _descriptionLabel.Text = data.Description;
+        int i = 0; foreach (var session in sessions.Values)
+        {
+            if (i >= _slots.Count) break;
 
-       foreach (var card in _cards)
-       {
-           card.SetHighLight(true);
-       }
+            var slot = _slots[i];
+
+            slot.UpdateInfo(session.Name, session.IsReady);
+
+            if (session.SelectedClassIndex < _allClasses.Length)
+            {
+                var classData = _allClasses[session.SelectedClassIndex];
+                slot.SetModel(classData.ModelScene);
+            }
+
+            i++;
+        }
+
+        _startButton.Visible = SteamManager.Instance.Connection.IsHost;
+        _startButton.Disabled = !CheckAllReady(sessions);
+    }
+
+    private bool CheckAllReady(Dictionary<byte, PlayerSession> sessions) => sessions.Count != 0 && sessions.Values.All(s => s.IsReady);
+
+    private void OnClassPicked(int index)
+    {
+        SteamManager.Instance.GameState.SelectClass(index);
+    }
+
+    private void OnReadyPressed()
+    {
+        SteamManager.Instance.GameState.ToggleReady();
+    }
+
+    private void OnStartPressed()
+    {
+        SteamManager.Instance.GameState.RequestStartGame();
     }
 }

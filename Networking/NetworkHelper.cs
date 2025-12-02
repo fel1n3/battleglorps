@@ -1,9 +1,8 @@
 ﻿using Steamworks;
-
-namespace BattleGlorps;
-
 using Godot;
 using System.IO;
+
+namespace BattleGlorps;
 
 public enum PacketType : byte
 {
@@ -14,6 +13,7 @@ public enum PacketType : byte
     ClassSelected = 4,
     AbilityCast = 5,
     MoveCommand = 6,
+    ReadyStatus = 7,
 }
 public struct LobbyInfo
 {
@@ -29,6 +29,7 @@ public class PlayerSession
     public CSteamID SteamId;
     public int SelectedClassIndex;
     public string Name;
+    public bool IsReady;
 }
 
 public static class NetworkHelper

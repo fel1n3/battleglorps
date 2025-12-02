@@ -1,10 +1,7 @@
 using Godot;
-using System;
 using System.IO;
 using BattleGlorps;
 using BattleGlorps.Core.Autoloads;
-using Godot.Collections;
-using Steamworks;
 
 public partial class NetworkedInputManager : Node3D
 {

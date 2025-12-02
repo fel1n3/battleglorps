@@ -1,7 +1,4 @@
 using Godot;
-using System;
-using System.IO;
-using BattleGlorps;
 using BattleGlorps.Classes;
 using BattleGlorps.Core.Autoloads;
 using BattleGlorps.Entities.Player;

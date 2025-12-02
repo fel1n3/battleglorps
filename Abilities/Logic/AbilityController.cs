@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using BattleGlorps.Core.Autoloads;
 using Godot;
-using Steamworks;
 
 namespace BattleGlorps.Classes;
 

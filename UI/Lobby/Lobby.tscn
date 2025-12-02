@@ -1,9 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://kvsdqb1eenpm"]
+[gd_scene load_steps=5 format=3 uid="uid://kvsdqb1eenpm"]
 
 [ext_resource type="Script" uid="uid://dwqp36qb1mr0m" path="res://UI/Lobby/Lobby.cs" id="1_w20w5"]
-[ext_resource type="PackedScene" uid="uid://cbierikevtc3r" path="res://UI/Lobby/ClassCard.tscn" id="2_81g6x"]
+[ext_resource type="PackedScene" uid="uid://chgamndl7bgcv" path="res://UI/Lobby/ClassButton.tscn" id="2_81g6x"]
+[ext_resource type="PackedScene" uid="uid://cajnyvy4iky8a" path="res://UI/Lobby/LobbyPlayerSlot.tscn" id="3_81g6x"]
+[ext_resource type="PackedScene" uid="uid://dom4ndjjxc70d" path="res://UI/Lobby/ClassSelectModal.tscn" id="4_wfbhu"]
 
-[node name="Lobby" type="Control" unique_id=141345828 node_paths=PackedStringArray("_grid")]
+[node name="Lobby" type="Control" unique_id=141345828 node_paths=PackedStringArray("_playerSlotsContainer", "_selectModal", "_changeClassButton", "_readyButton", "_startButton")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,21 +13,70 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_w20w5")
-_classCardPrefab = ExtResource("2_81g6x")
-_grid = NodePath("ClassSelect/GridContainer")
+_playerSlotPrefab = ExtResource("3_81g6x")
+_playerSlotsContainer = NodePath("MainLayout/PlayerSlotsContainer")
+_selectModal = NodePath("ClassSelectModal")
+_changeClassButton = NodePath("MainLayout/BottomBar/ChangeClassButton")
+_readyButton = NodePath("MainLayout/BottomBar/ReadyButton")
+_startButton = NodePath("MainLayout/BottomBar/StartButton")
 
-[node name="ClassSelect" type="HBoxContainer" parent="." unique_id=1225718915]
+[node name="Background" type="Panel" parent="." unique_id=761334806]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MainLayout" type="VBoxContainer" parent="." unique_id=134790387]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopBar" type="HBoxContainer" parent="MainLayout" unique_id=542961803]
+layout_mode = 2
+
+[node name="LobbyTitle" type="Label" parent="MainLayout/TopBar" unique_id=2089701229]
+layout_mode = 2
+
+[node name="LobbyId" type="Label" parent="MainLayout/TopBar" unique_id=1992677757]
+layout_mode = 2
+
+[node name="PlayerSlotsContainer" type="HBoxContainer" parent="MainLayout" unique_id=263177609]
+layout_mode = 2
+size_flags_vertical = 3
+alignment = 1
+
+[node name="BottomBar" type="HBoxContainer" parent="MainLayout" unique_id=401164916]
+layout_mode = 2
+
+[node name="ChangeClassButton" type="Button" parent="MainLayout/BottomBar" unique_id=1755143705]
+layout_mode = 2
+text = "Change Class"
+
+[node name="VSeparator" type="VSeparator" parent="MainLayout/BottomBar" unique_id=315858107]
+layout_mode = 2
+
+[node name="ReadyButton" type="Button" parent="MainLayout/BottomBar" unique_id=1747587182]
+layout_mode = 2
+text = "Ready"
+
+[node name="StartButton" type="Button" parent="MainLayout/BottomBar" unique_id=909694610]
+layout_mode = 2
+text = "Start"
+
+[node name="ClassSelectModal" parent="." unique_id=2083825904 instance=ExtResource("4_wfbhu")]
 layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
-
-[node name="GridContainer" type="GridContainer" parent="ClassSelect" unique_id=1914120980]
-layout_mode = 2
-columns = 3
-
-[node name="SubViewportContainer" type="SubViewportContainer" parent="ClassSelect" unique_id=448770358]
-layout_mode = 2
-
-[node name="SubViewport" type="SubViewport" parent="ClassSelect/SubViewportContainer" unique_id=2030787495]
-handle_input_locally = false
-render_target_update_mode = 4
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_right = 800.0
+offset_bottom = 600.0
+grow_horizontal = 1
+grow_vertical = 1
+_classButtonPrefab = ExtResource("2_81g6x")

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Godot;
 using Steamworks;
@@ -13,6 +12,7 @@ public partial class SteamConnectionManager : Node
     public event Action<CSteamID, byte[]> OnPacketReceived;
     public event Action<CSteamID> OnPeerConnected;
     public event Action<CSteamID> OnPeerDisconnected;
+
 
     public bool IsHost => _listenSocket != HSteamListenSocket.Invalid;
 
