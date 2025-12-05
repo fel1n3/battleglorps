@@ -208,6 +208,7 @@ public partial class GameNetworkState : Node
         if(_sessions.TryGetValue(_localNetId, out PlayerSession session))
         {
             session.SelectedClassIndex = classIndex;
+            OnSessionUpdated?.Invoke();
         }
         
         BroadcastSessionData(_sessions[_localNetId]);

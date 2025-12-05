@@ -7,6 +7,9 @@ public partial class NetworkedInputManager : Node3D
 {
     private NetworkedPlayer _localPlayer;
     private Camera3D _camera;
+    private bool _isRightMouseHeld = false;
+    private float _moveUpdateTimer = 0f;
+    private const float MoveUpdateInterval = 0.05f;
 
     public void Initialize(NetworkedPlayer player, Camera3D cam)
     {
@@ -22,8 +25,27 @@ public partial class NetworkedInputManager : Node3D
         {
             if (mouseButton.ButtonIndex == MouseButton.Right)
             {
-                HandleRightClick();
+                _isRightMouseHeld = mouseButton.Pressed;
+
+                if (mouseButton.Pressed)
+                {
+                    HandleRightClick();
+                    _moveUpdateTimer = 0f;
+                }
             }
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_isRightMouseHeld || _localPlayer == null || _camera == null) return;
+
+        _moveUpdateTimer += (float) delta;
+
+        if (_moveUpdateTimer >= MoveUpdateInterval)
+        {
+            _moveUpdateTimer = 0f;
+            HandleRightClick();
         }
     }
 
