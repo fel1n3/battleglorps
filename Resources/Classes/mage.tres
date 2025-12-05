@@ -1,12 +1,14 @@
-[gd_resource type="Resource" script_class="ClassData" load_steps=3 format=3 uid="uid://dythg5ewbt30g"]
+[gd_resource type="Resource" script_class="ClassData" load_steps=4 format=3 uid="uid://dythg5ewbt30g"]
 
+[ext_resource type="PackedScene" uid="uid://byvku8mh8ytcf" path="res://Resources/Classes/Models/mage_model.tscn" id="1_0nh4d"]
 [ext_resource type="Script" uid="uid://o2lr4ea86umw" path="res://Resources/Classes/ClassData.cs" id="1_53fim"]
 
-[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_mtgnv"]
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_1rwuy"]
 
 [resource]
 script = ExtResource("1_53fim")
-ClassName = "sex"
+ClassName = "wizord"
 ClassColor = Color(0.89309657, 0.4964062, 0.60415137, 1)
+ModelScene = ExtResource("1_0nh4d")
 Abilities = null
 metadata/_custom_type_script = "uid://o2lr4ea86umw"

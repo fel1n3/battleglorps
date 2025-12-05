@@ -42,6 +42,5 @@ public partial class SteamManager : Node
     public override void _ExitTree()
     {
         SteamAPI.Shutdown();
-        
     }
 }

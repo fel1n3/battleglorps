@@ -13,42 +13,71 @@ public partial class NetworkedPlayer : PlayerClass
     private Vector3 _targetServerPos;
     private float _lerpSpeed = 15.0f;
 
-    [Export] private Node3D _modelParent;
-    [Export] private PlayerStats _stats;
-    [Export] private AbilityManager _abilityManager;
-    
-    public override void _Ready()
-    {
-        base._Ready();
+    private Node3D _modelParent;
+    private PlayerStats _stats;
+    private AbilityManager _abilityManager;
 
+    public void Initialize(byte netId, CSteamID steamId, bool isLocal, ClassData classData)
+    {
+        NetworkId = netId;
+        SteamId = steamId;
+        IsLocalPlayer = isLocal;
+        Name = $"Player_{netId}";
+
+        _modelParent = GetNodeOrNull<Node3D>("ModelParent");
+        if (_modelParent == null)
+        {
+            _modelParent = new Node3D();
+            _modelParent.Name = "ModelParent";
+            AddChild(_modelParent);
+        }
+
+        _stats = GetNodeOrNull<PlayerStats>("PlayerStats");
+        if (_stats == null)
+        {
+            _stats = new PlayerStats();
+            _stats.Name = "PlayerStats";
+            AddChild(_stats);
+        }
+
+        _abilityManager = GetNodeOrNull<AbilityManager>("AbilityManager");
+        if (_abilityManager == null)
+        {
+            _abilityManager = new AbilityManager();
+            _abilityManager.Name = "AbilityManager";
+            AddChild(_abilityManager);
+        }
+            
+        bool isHost = SteamManager.Instance.Connection.IsHost;
+        EnableNavigation(isHost);
+        SetPhysicsProcess(true);
+
+        ApplyClassData(classData);
         if (IsLocalPlayer)
         {
-            var camController = new CameraController();
-            GetTree().Root.AddChild(camController);
-            camController.SetTarget(this);
+            GD.Print($"[Player {NetworkId}] Initializing local controls...");
 
-            var input = new NetworkedInputManager();
+            CameraController camController = new CameraController();
+            GetTree().Root.AddChild(camController);
+
+            NetworkedInputManager input = new();
             AddChild(input);
-            input.Initialize(this, GetViewport().GetCamera3D());
+            input.Initialize(this, camController.GetCamera());
         }
-        
-        SetPhysicsProcess(true);
     }
 
-    public void InitializeClass(ClassData data)
+    private void ApplyClassData(ClassData data)
     {
+        if (data == null) return;
+
         _stats.Initialize(data);
         Speed = _stats.MovementSpeed;
 
-        foreach (Node child in _modelParent.GetChildren())
-        {
-            child.QueueFree();
-        }
-
+        foreach (Node child in _modelParent.GetChildren()) child.QueueFree();
         if (data.ModelScene != null)
         {
-            Node3D modelInstance = data.ModelScene.Instantiate<Node3D>();
-            _modelParent.AddChild(modelInstance);
+            var model = data.ModelScene.Instantiate<Node3D>();
+            _modelParent.AddChild(model);
         }
 
         _abilityManager.InitializeAbilities(data);

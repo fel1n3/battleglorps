@@ -6,39 +6,45 @@ public partial class PlayerClass : CharacterBody3D
     [Export] public float RotationSpeed = 10.0f;
     
     protected NavigationAgent3D _navAgent;
+    private bool _isActive = false;
     
     public override void _Ready()
     {
         _navAgent = GetNode<NavigationAgent3D>("NavigationAgent3D");
-        _navAgent.PathDesiredDistance = 0.5f;
-        _navAgent.TargetDesiredDistance = 0.5f;
+        _navAgent.PathDesiredDistance = 0.2f;
+        _navAgent.TargetDesiredDistance = 0.2f;
+        _navAgent.PathHeightOffset = -0.6f;
+    }
+
+    public void EnableNavigation(bool enable)
+    {
+        _isActive = enable;
+        _navAgent.ProcessMode = enable ? ProcessModeEnum.Inherit : ProcessModeEnum.Disabled;
     }
 
     public void SetMoveTarget(Vector3 targetPos)
     {
+        if (!_isActive) return;
         _navAgent.TargetPosition = targetPos;
     }
 
-    public virtual void ProcessMovement(double delta)
+    public void ProcessMovement(double delta)
     {
-        if (_navAgent.IsNavigationFinished())
+        if (!_isActive || _navAgent.IsNavigationFinished())
         {
             Velocity = Vector3.Zero;
+            MoveAndSlide();
             return;
         }
-
+        
+        Vector3 currentPos = GlobalTransform.Origin;
         Vector3 nextPathPos = _navAgent.GetNextPathPosition();
-        Vector3 direction = (nextPathPos - GlobalPosition).Normalized();
+        GD.Print($"{currentPos} -> {nextPathPos}");
 
-        if (direction != Vector3.Zero)
-        {
-            float angle = Mathf.Atan2(direction.X, direction.Z);
-            Vector3 newRot = Rotation;
-            newRot.Y = Mathf.LerpAngle(Rotation.Y, angle, RotationSpeed * (float) delta);
-            Rotation = newRot;
-        }
+        Vector3 direction = (nextPathPos - currentPos).Normalized();
 
-        Velocity = direction * Speed;
+        Vector3 newVelocity = direction * Speed;
+        Velocity = newVelocity;
         MoveAndSlide();
     }
 

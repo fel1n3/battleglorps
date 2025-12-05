@@ -28,13 +28,14 @@ public partial class SteamLobbyManager : Node
     public void CreateLobby()
     {
         OnStatusMessage?.Invoke("Creating lobby...");
-        var call = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, 4);
+        var call = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, 2);
         _lobbyCreated = CallResult<LobbyCreated_t>.Create(OnLobbyCreatedCallback);
         _lobbyCreated.Set(call);
     }
 
     private void OnLobbyCreatedCallback(LobbyCreated_t param, bool bIOFailure)
     {
+        SteamManager.Instance.Connection.CreateP2PHost();
         if (param.m_eResult != EResult.k_EResultOK || bIOFailure)
         {
             OnStatusMessage?.Invoke("Failed to create lobby.");
@@ -79,7 +80,9 @@ public partial class SteamLobbyManager : Node
 
     public void JoinLobby(CSteamID lobbyId)
     {
-        var call = SteamMatchmaking.JoinLobby(lobbyId);
+        GetTree().ChangeSceneToFile("res://UI/Lobby/Lobby.tscn");
+        GD.Print($"joining lobby {lobbyId}");
+        SteamAPICall_t call = SteamMatchmaking.JoinLobby(lobbyId);
         _lobbyEnter = CallResult<LobbyEnter_t>.Create((param, bIoFailure) =>
         {
             if (param.m_EChatRoomEnterResponse == (uint) EChatRoomEnterResponse.k_EChatRoomEnterResponseSuccess)
@@ -101,6 +104,7 @@ public partial class SteamLobbyManager : Node
 
     private void OnGameLobbyJoinRequested(GameLobbyJoinRequested_t param)
     {
+        GD.Print($"game lobby join requested {param.m_steamIDFriend} : {param.m_steamIDLobby}");
         JoinLobby(param.m_steamIDLobby);
     }
 }

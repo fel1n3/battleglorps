@@ -10,6 +10,7 @@ public partial class NetworkedInputManager : Node3D
 
     public void Initialize(NetworkedPlayer player, Camera3D cam)
     {
+        GD.Print($"initialize input manager {player.Name} | {cam == null}");
         _localPlayer = player;
         _camera = cam;
     }
@@ -17,7 +18,6 @@ public partial class NetworkedInputManager : Node3D
     public override void _UnhandledInput(InputEvent @event)
     {
         if(_localPlayer == null || _camera == null) return;
-        
         if (@event is InputEventMouseButton mouseButton)
         {
             if (mouseButton.ButtonIndex == MouseButton.Right)
@@ -30,19 +30,20 @@ public partial class NetworkedInputManager : Node3D
 
     private void HandleRightClick()
     {
+        GD.Print("right click received handling it");
         var mousePos = GetViewport().GetMousePosition();
         var from = _camera.ProjectRayOrigin(mousePos);
         var to = from + _camera.ProjectRayNormal(mousePos) * 1000f;
 
         var space = _localPlayer.GetWorld3D().DirectSpaceState;
         var query = PhysicsRayQueryParameters3D.Create(from, to);
-        query.CollideWithAreas = false;
+
+        query.CollisionMask = 1;
 
         var result = space.IntersectRay(query);
 
         if (result.Count > 0)
         {
-            Node collider = (Node) result["collider"];
             Vector3 hitPos = (Vector3) result["position"];
 
             SendMovePacket(hitPos);

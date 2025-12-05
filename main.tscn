@@ -1,7 +1,10 @@
 [gd_scene load_steps=5 format=3 uid="uid://c1hdowd3src6x"]
 
-[ext_resource type="Script" uid="uid://1nxge02ec3wg" path="res://Entities/Player/CameraController.cs" id="1_h2yge"]
-[ext_resource type="Script" uid="uid://dj7pkxnjhebd5" path="res://Networking/NetworkedInputManager.cs" id="2_0xm2m"]
+[ext_resource type="Script" uid="uid://cieanoq7bit4t" path="res://GameLevel.cs" id="1_1bvp3"]
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_0xm2m"]
+vertices = PackedVector3Array(-29.5, 0.5, -29.5, -29.5, 0.5, 29.5, 29.5, 0.5, 29.5, 29.5, 0.5, -29.5)
+polygons = [PackedInt32Array(3, 2, 0), PackedInt32Array(0, 2, 1)]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_7dm0k"]
 size = Vector3(60, 2, 60)
@@ -9,28 +12,25 @@ size = Vector3(60, 2, 60)
 [sub_resource type="BoxMesh" id="BoxMesh_ig7tw"]
 size = Vector3(60, 2, 60)
 
-[node name="Main" type="Node3D" unique_id=1659710956]
-
-[node name="NetworkedInputManager" type="Node3D" parent="." unique_id=322256414]
-script = ExtResource("2_0xm2m")
+[node name="Main" type="Node3D" unique_id=1659710956 node_paths=PackedStringArray("_spawnContainer")]
+script = ExtResource("1_1bvp3")
+_spawnContainer = NodePath("Spawn")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1554204951]
 transform = Transform3D(1, 0, 0, 0, 1.1924881e-08, 1, 0, -1, 1.1924881e-08, 0, 8, 0)
 shadow_enabled = true
 
-[node name="Ground" type="StaticBody3D" parent="." unique_id=1184233740]
+[node name="Spawn" type="Node3D" parent="." unique_id=162090535]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=1281559540]
+navigation_mesh = SubResource("NavigationMesh_0xm2m")
+
+[node name="Ground" type="StaticBody3D" parent="NavigationRegion3D" unique_id=1184233740]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=1840430551]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NavigationRegion3D/Ground" unique_id=1840430551]
 shape = SubResource("BoxShape3D_7dm0k")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=1080971788]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="NavigationRegion3D/Ground" unique_id=1080971788]
 mesh = SubResource("BoxMesh_ig7tw")
-
-[node name="CameraController" type="Node3D" parent="." unique_id=758572054]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9000001, 0)
-script = ExtResource("1_h2yge")
-
-[node name="Camera3D" type="Camera3D" parent="CameraController" unique_id=356895310]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
-current = true

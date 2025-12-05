@@ -14,6 +14,7 @@ public enum PacketType : byte
     AbilityCast = 5,
     MoveCommand = 6,
     ReadyStatus = 7,
+    ChatMessage = 8,
 }
 public struct LobbyInfo
 {

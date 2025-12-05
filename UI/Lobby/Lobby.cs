@@ -18,7 +18,7 @@ public partial class Lobby : Control
 
     public override void _Ready()
     {
-        var availableClasses = SteamManager.Instance.GameState.GetAllClasses();
+        _allClasses = SteamManager.Instance.GameState.GetAllClasses();
         for (int i = 0; i < 2; i++)
         {
             LobbyPlayerSlot slot = _playerSlotPrefab.Instantiate<LobbyPlayerSlot>();

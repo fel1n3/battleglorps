@@ -2,10 +2,9 @@
 
 [ext_resource type="Script" uid="uid://b2vtpn4utk1y0" path="res://Networking/NetworkedPlayer.cs" id="1_4flbx"]
 [ext_resource type="Script" uid="uid://cblqeiphg8ewa" path="res://Entities/Player/PlayerStats.cs" id="2_3uyv8"]
+[ext_resource type="Script" uid="uid://dsv7vny4d8b1u" path="res://Abilities/Logic/AbilityManager.cs" id="2_lu8i8"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_onrkg"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_i3pqv"]
 
 [node name="Player" type="CharacterBody3D" unique_id=1190690771]
 script = ExtResource("1_4flbx")
@@ -13,10 +12,13 @@ script = ExtResource("1_4flbx")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=586684156]
 shape = SubResource("CapsuleShape3D_onrkg")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=305765422]
-mesh = SubResource("CapsuleMesh_i3pqv")
-
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="." unique_id=1410889374]
+debug_enabled = true
+debug_use_custom = true
+debug_path_custom_color = Color(0.7624244, 4.379898e-06, 0.47415018, 1)
+
+[node name="AbilityManager" type="Node" parent="." unique_id=1389561712]
+script = ExtResource("2_lu8i8")
 
 [node name="PlayerStats" type="Node" parent="." unique_id=1569008637]
 script = ExtResource("2_3uyv8")
