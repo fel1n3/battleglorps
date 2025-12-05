@@ -163,7 +163,10 @@ public partial class GameNetworkState : Node
 
                 if (_playerList.TryGetValue(casterId, out var caster))
                 {
-                    //caster.TriggerAbilityVisuals(abilityName);
+                    if (!SteamManager.Instance.Connection.IsHost)
+                    {
+                        caster.TriggerAbilityVisuals(abilityName);
+                    }
                 }
 
                 if (SteamManager.Instance.Connection.IsHost) 
@@ -188,6 +191,34 @@ public partial class GameNetworkState : Node
                 ProcessReadyStatus(rId, isReady);
                 if (SteamManager.Instance.Connection.IsHost) 
                     SteamManager.Instance.Connection.SendToAll(data);
+                break;
+            case PacketType.DamagePlayer:
+                byte targetId = reader.ReadByte();
+                short damage = reader.ReadInt16();
+                short newHealth = reader.ReadInt16();
+
+                if (_playerList.TryGetValue(targetId, out var damagedPlayer))
+                {
+                    damagedPlayer.Client_ApplyDamageVisuals(damage, newHealth);
+                }
+
+                if (SteamManager.Instance.Connection.IsHost) SteamManager.Instance.Connection.SendToAll(data);
+                break;
+            case PacketType.PlayerDied:
+                byte victimId = reader.ReadByte();
+                byte killerId = reader.ReadByte();
+                
+                GD.Print($"player {victimId} killed by {killerId}");
+                if (_playerList.TryGetValue(victimId, out var victim))
+                {
+                    if (!SteamManager.Instance.Connection.IsHost)
+                    {
+                        victim.Client_HandleDeath();
+                        
+                    }
+                }
+
+                if (SteamManager.Instance.Connection.IsHost) SteamManager.Instance.Connection.SendToAll(data);
                 break;
                 
                 

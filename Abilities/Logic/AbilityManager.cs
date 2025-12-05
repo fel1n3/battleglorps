@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace BattleGlorps.Classes;
@@ -40,16 +41,22 @@ public partial class AbilityManager : Node
 
     public void TriggerVisualsByName(string abilityName)
     {
-        foreach (var ability in _activeAbilities)
+        foreach (AbilityController ability in _activeAbilities.Where(ability => ability.AbilityToCast.AbilityName == abilityName))
         {
-            if (ability.AbilityToCast.AbilityName == abilityName)
-            {
-                if (ability.AbilityToCast.AbilityName == abilityName)
-                {
-                    ability.ExecuteVisualsOnly(abilityName);
-                    return;
-                }
-            }
+            ability.ExecuteVisualsOnly();
+            return;
         }
     }
+
+    public AbilityController GetAbilityByIndex(int index)
+    {
+        if (index >= 0 && index < _activeAbilities.Count)
+        {
+            return _activeAbilities[index];
+        }
+
+        return null;
+    }
+
+    public int GetAbilityCount() => _activeAbilities.Count;
 }

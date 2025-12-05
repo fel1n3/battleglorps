@@ -1,4 +1,5 @@
-﻿using BattleGlorps.Entities.Player;
+﻿using BattleGlorps.Core.Autoloads;
+using BattleGlorps.Entities.Player;
 using Godot;
 
 namespace BattleGlorps.Classes;
@@ -24,14 +25,24 @@ public partial class SpawnProjectileEffect : AbilityEffect
     
     [Export] public float OffsetForward = 1.5f;
 
-    public override void ApplyEffect(Node3D caster)
+    public override void ApplyEffect(Node3D caster, bool isAuthoritative)
     {
-        //if NOT caster  is server return;
+        if (!isAuthoritative) return;
+        if (!SteamManager.Instance.Connection.IsHost) return;
+        
         if (ProjectileScene == null) return;
 
         int finalDamage = BaseDamage;
+        
+        
+        if (caster is not NetworkedPlayer player)
+        {
+            player = caster.GetParent()?.GetParent() as NetworkedPlayer;
+        }
 
-        var stats = caster.GetNodeOrNull<PlayerStats>("PlayerStats");
+        if (player == null) return;
+
+        PlayerStats stats = caster.GetNodeOrNull<PlayerStats>("PlayerStats");
         if (stats != null)
         {
             switch (ScalingStat)
@@ -50,12 +61,18 @@ public partial class SpawnProjectileEffect : AbilityEffect
 
         var proj = ProjectileScene.Instantiate<GenericProjectile>();
 
-        proj.Position = caster.GlobalPosition + (-caster.GlobalTransform.Basis.Z * OffsetForward);
-        proj.Rotation = caster.GlobalRotation;
+        Vector3 spawnOffset = -player.GlobalTransform.Basis.Z * OffsetForward;
+        Vector3 spawnPosition = player.GlobalPosition + spawnOffset;
+        Vector3 spawnRotation = player.GlobalRotation;
 
+        proj.TopLevel = true;
+
+        proj.Position = spawnPosition;
+        proj.Rotation = spawnRotation;
         proj.Damage = finalDamage;
-        proj.OwnerId = caster.Multiplayer.GetUniqueId();
+        proj.Speed = Speed;
+        proj.OwnerId = player.NetworkId;
 
-       caster.GetTree().Root.AddChild(proj);
+        caster.GetTree().Root.AddChild(proj);
     }
 }

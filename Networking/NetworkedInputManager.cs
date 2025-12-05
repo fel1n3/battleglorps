@@ -34,6 +34,16 @@ public partial class NetworkedInputManager : Node3D
                 }
             }
         }
+
+        for (int i = 0; i < 4; i++)
+        {
+            string actionName = $"ability_{i + 1}";
+            if (Input.IsActionJustPressed(actionName))
+            {
+                _localPlayer.CastAbility(i);
+                break;
+            }
+        }
     }
 
     public override void _Process(double delta)
@@ -52,7 +62,6 @@ public partial class NetworkedInputManager : Node3D
 
     private void HandleRightClick()
     {
-        GD.Print("right click received handling it");
         var mousePos = GetViewport().GetMousePosition();
         var from = _camera.ProjectRayOrigin(mousePos);
         var to = from + _camera.ProjectRayNormal(mousePos) * 1000f;

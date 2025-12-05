@@ -4,7 +4,7 @@ using Godot.Collections;
 namespace BattleGlorps.Classes;
 
 [GlobalClass]
-public abstract partial class AbilityData : Resource
+public partial class AbilityData : Resource
 {
     [Export] public string AbilityName { get; set; }
     [Export(PropertyHint.MultilineText)] public string Tooltip { get; set; }

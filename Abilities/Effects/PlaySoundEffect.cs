@@ -8,7 +8,7 @@ public partial class PlaySoundEffect : AbilityEffect
     [Export] public AudioStream SoundClip;
 
 
-    public override void ApplyEffect(Node3D caster)
+    public override void ApplyEffect(Node3D caster, bool isAuthoritative)
     {
         var audioPlayer = new AudioStreamPlayer3D();
         caster.AddChild(audioPlayer);

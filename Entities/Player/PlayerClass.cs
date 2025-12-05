@@ -39,9 +39,19 @@ public partial class PlayerClass : CharacterBody3D
         
         Vector3 currentPos = GlobalTransform.Origin;
         Vector3 nextPathPos = _navAgent.GetNextPathPosition();
-        GD.Print($"{currentPos} -> {nextPathPos}");
-
+        
         Vector3 direction = (nextPathPos - currentPos).Normalized();
+
+        if (direction.LengthSquared() > 0.01f)
+        {
+            float targetYaw = Mathf.Atan2(-direction.X, -direction.Z);
+
+            Vector3 currentRotation = Rotation;
+            float currentYaw = currentRotation.Y;
+
+            float newYaw = Mathf.LerpAngle(currentYaw, targetYaw, RotationSpeed * (float) delta);
+            Rotation = new Vector3(currentRotation.X, newYaw, currentRotation.Z);
+        }
 
         Vector3 newVelocity = direction * Speed;
         Velocity = newVelocity;

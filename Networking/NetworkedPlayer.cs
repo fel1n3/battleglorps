@@ -1,7 +1,10 @@
+using System.IO;
+using BattleGlorps;
 using Godot;
 using BattleGlorps.Classes;
 using BattleGlorps.Core.Autoloads;
 using BattleGlorps.Entities.Player;
+using BattleGlorps.UI.HUD;
 using Steamworks;
 
 public partial class NetworkedPlayer : PlayerClass
@@ -16,6 +19,7 @@ public partial class NetworkedPlayer : PlayerClass
     private Node3D _modelParent;
     private PlayerStats _stats;
     private AbilityManager _abilityManager;
+    private GameHUD _hud;
 
     public void Initialize(byte netId, CSteamID steamId, bool isLocal, ClassData classData)
     {
@@ -53,19 +57,47 @@ public partial class NetworkedPlayer : PlayerClass
         SetPhysicsProcess(true);
 
         ApplyClassData(classData);
-        if (IsLocalPlayer)
-        {
-            GD.Print($"[Player {NetworkId}] Initializing local controls...");
+        
+        if (!IsLocalPlayer) return;
+        
+        GD.Print($"[Player {NetworkId}] Initializing local controls...");
 
-            CameraController camController = new CameraController();
-            GetTree().Root.AddChild(camController);
+        CameraController camController = new CameraController();
+        GetTree().Root.AddChild(camController);
 
-            NetworkedInputManager input = new();
-            AddChild(input);
-            input.Initialize(this, camController.GetCamera());
-        }
+        NetworkedInputManager input = new();
+        AddChild(input);
+        input.Initialize(this, camController.GetCamera());
+
+        SpawnHUD(classData);
     }
 
+    private void SpawnHUD(ClassData classData)
+    {
+        var hudScene = GD.Load<PackedScene>("res://UI/HUD/GameHUD.tscn");
+        if (hudScene == null) return;
+
+        _hud = hudScene.Instantiate<GameHUD>();
+        GetTree().Root.AddChild(_hud);
+
+        CallDeferred(nameof(InitializeHUDDeferred), classData);
+    }
+
+    private void InitializeHUDDeferred(ClassData classData)
+    {
+        if (_hud != null)
+        {
+            _hud.Initialize(this);
+
+            var classLabel = _hud.GetNode<Label>("HealthContainer/HealthVBox/ClassNameLabel");
+            if (classLabel != null && classData != null)
+            {
+                classLabel.Text = classData.ClassName;
+                classLabel.AddThemeColorOverride("font_color", classData.ClassColor);
+            }
+        }
+    }
+    
     private void ApplyClassData(ClassData data)
     {
         if (data == null) return;
@@ -102,6 +134,81 @@ public partial class NetworkedPlayer : PlayerClass
         SetMoveTarget(target);
     }
 
+    public void Server_TakeDamage(int damage, byte attackerNetId)
+    {
+        if (!SteamManager.Instance.Connection.IsHost) return;
+        if (_stats == null || _stats.IsDead) return;
+
+        _stats.TakeDamage(damage);
+
+        BroadcastDamagePacket(NetworkId, damage, _stats.CurrentHealth);
+
+        if (_stats.IsDead)
+        {
+            BroadcastDeathPacket(NetworkId, attackerNetId);
+            HandleDeath();
+        }
+    }
+
+    private void HandleDeath()
+    {
+        SetPhysicsProcess(false);
+        Visible = false;
+
+        GetTree().CreateTimer(3.0).Timeout += () =>
+        {
+            _stats.Respawn();
+            Visible = true;
+            SetPhysicsProcess(true);
+
+            Position = new Vector3(NetworkId * 2, 0, 0);
+        };
+    }
+
+    private void BroadcastDamagePacket(byte targetNetId, int damage, int newHealth)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+
+        writer.Write((byte) PacketType.DamagePlayer);
+        writer.Write(targetNetId);
+        writer.Write((short) damage);
+        writer.Write((short) newHealth);
+
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
+    }
+
+    private void BroadcastDeathPacket(byte victimNetId, byte killerNetId)
+    {
+        using MemoryStream ms = new();
+        using BinaryWriter writer = new(ms);
+
+        writer.Write((byte) PacketType.PlayerDied);
+        writer.Write(victimNetId);
+        writer.Write(killerNetId);
+        
+        SteamManager.Instance.Connection.SendToAll(ms.ToArray());
+    }
+
+    public void Client_ApplyDamageVisuals(int damage, int newHealth)
+    {
+        if (_stats == null) return;
+        
+        //update health for hud
+        //authoritative
+        GD.Print($"player {NetworkId} received damage {damage} new health {newHealth}");
+        
+        //TODO UI STUFF
+    }
+
+    public void Client_HandleDeath()
+    {
+        GD.Print($"player {NetworkId} died");
+
+        Visible = false;
+        SetPhysicsProcess(false);
+    }
+
     public void UpdateRemoteState(Vector3 pos, Vector3 rot)
     {
         _targetServerPos = pos;
@@ -109,5 +216,21 @@ public partial class NetworkedPlayer : PlayerClass
         Rotation = new Vector3(0, rot.Y, 0);
         
     }
+
+    public void TriggerAbilityVisuals(string abilityName)
+    {
+        _abilityManager?.TriggerVisualsByName(abilityName);
+    }
     
+    public void CastAbility(int index)
+    {
+        _abilityManager?.CastAbilityByIndex(index);
+    }
+
+    public override void _ExitTree()
+    {
+        if (_hud == null) return;
+        _hud.QueueFree();
+        _hud = null;
+    }
 }
